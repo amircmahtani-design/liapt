@@ -127,3 +127,15 @@ EVERYTHING ELSE RESTORED
 
 BANDS
   21 band movements, and swaps offer them first.
+
+STOPPING, DISCARDING, DELETING
+  Three different things, and the sheet says which is which.
+    Stop and keep what I did   — ends the session, saves the sets completed
+    I didn't actually do this  — the session never happened: every set logged
+                                 that day comes out of the strength history,
+                                 any record claimed that day is taken back,
+                                 the streak is recounted, and a fresh session
+                                 takes its place. The check-in is kept.
+    Clear today entirely       — no session at all today; rebuild any time
+  Reachable from the session menu, from the finished screen, and from any day
+  in the calendar or in the workout history. Every one of them leaves an Undo.

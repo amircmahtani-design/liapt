@@ -2195,12 +2195,21 @@ function topSet(entry){
     return best;
   },null);
 }
+/* One place that turns a logged set into words. */
+function setText(t){
+  if(!t) return "—";
+  if(t.sec) return t.sec+"s";
+  if(t.w) return kgTxt(t.w)+" × "+(t.r||0);
+  if(t.r) return t.r+" reps";
+  if(t.txt) return t.txt;
+  return "done";
+}
 function lastPerformanceText(ex,dateISO){
   const e=lastBefore(ex,dateISO||today()); if(!e) return "";
   const t=topSet(e); if(!t) return "";
-  if(t.sec) return "Last time: "+t.sec+"s · "+ukShort(e.date);
-  if(t.w) return "Last time: "+kgTxt(t.w)+" × "+t.r+" · "+ukShort(e.date);
-  return "Last time: "+t.r+" reps · "+ukShort(e.date);
+  const txt=setText(t);
+  if(txt==="—") return "";
+  return "Last time: "+txt+" · "+ukShort(e.date);
 }
 function bestEver(ex){
   let best=null;
@@ -2677,6 +2686,7 @@ function logSet(w,itemId,payload){
   if(payload.w!=null) set.w=payload.w;
   if(payload.r!=null) set.r=payload.r;
   if(payload.sec!=null) set.sec=payload.sec;
+  if(payload.txt!=null) set.txt=payload.txt;
   if(payload.rpe!=null) set.rpe=payload.rpe;
   if(payload.pain) set.pain=payload.pain;
   entry.sets.push(set);
@@ -2734,6 +2744,49 @@ function sessionElapsed(w){
 }
 function isPaused(w){ return !!(w&&w.state&&w.state.clock&&w.state.clock.pausedAt); }
 function sessionLive(w){ return !!(w&&w.state&&w.state.clock&&w.state.clock.startedAt&&!w.state.finished); }
+
+/* ---------- discarding a session ----------
+   Ending a workout saves what was done. Discarding one says it never
+   happened: the logged sets for that date come out of the strength history,
+   any record claimed on that date goes with them, and the streak is counted
+   again. Every discard leaves an undo snapshot. */
+function loggedOn(dateISO){
+  const d=dateISO||today();
+  let sets=0; const exs=[];
+  Object.keys(DB.strength||{}).forEach(ex=>{
+    const e=(DB.strength[ex]||[]).find(x=>x.date===d);
+    if(e && (e.sets||[]).length){ sets+=e.sets.length; exs.push(ex); }
+  });
+  return { sets, exercises:exs.length, names:exs,
+           prs:(DB.prs||[]).filter(p=>p.date===d).length };
+}
+function discardSession(dateISO,keepPlan){
+  const d=dateISO||today();
+  Object.keys(DB.strength||{}).forEach(ex=>{
+    DB.strength[ex]=(DB.strength[ex]||[]).filter(e=>e.date!==d);
+    if(!DB.strength[ex].length) delete DB.strength[ex];
+  });
+  DB.prs=(DB.prs||[]).filter(p=>p.date!==d);
+  if(d===today()){
+    const ci=checkinOn(d);
+    if(keepPlan===false){
+      DB.sessions[d]=restSession(d);
+      DB.sessions[d].deleted=true; DB.sessions[d].title="Cleared";
+    } else {
+      DB.sessions[d]=buildSession(d, DB.prefs.lastDuration||"full");
+      /* the morning check-in was real even if the session wasn't — keep it */
+      if(ci && ci.analysed){
+        const changes=applyCheckin(DB.sessions[d],ci);
+        DB.sessions[d].analysis={...(ci.analysis||{}),
+          headline:"Starting again", summary:"Session discarded and rebuilt. "+(changes[0]||""), changes};
+      }
+    }
+  } else {
+    delete DB.sessions[d];
+  }
+  updateStreak(today());
+  save();
+}
 
 function updateStreak(date){
   let n=0, d=date||today();
@@ -3595,6 +3648,12 @@ function openDay(date){
   if(date===today() && !rest){
     body+='<button class="btn" style="margin-top:20px" onclick="closeSheet();go(\'train\')"><span class="lbl">Open today\'s session</span></button>';
   }
+  const lg=loggedOn(date);
+  if((s && !s.rest && !s.deleted) || lg.sets){
+    body+='<button class="btn danger" style="margin-top:'+(date===today()?10:20)+'px" onclick="confirmDiscardDay(\''+date+'\')">'+
+      '<span class="lbl">'+(date===today()?"Delete or discard today":"Delete this workout")+'</span></button>';
+    if(lg.sets) body+='<p class="tiny dim" style="margin-top:8px">'+plural(lg.sets,"set")+' logged on this day.</p>';
+  }
   openSheet(ukLong(date),body,()=>{ CAL_SEL=null; renderHome(); });
 }
 
@@ -3789,19 +3848,90 @@ function finishSession(){
   stopTicking(); renderTrain(); beep(3); toTop();
 }
 function endWorkout(){ finishSession(); }
-function deleteWorkout(){
-  const d=today();
-  UNDO={label:"workout deleted", session:JSON.parse(JSON.stringify(DB.sessions[d]||null))};
-  DB.sessions[d]=restSession(d);
-  DB.sessions[d].deleted=true; DB.sessions[d].title="Cleared";
-  save(); renderTrain();
-  toast("Workout deleted");
-}
 let UNDO=null;
+function snapshotFor(date){
+  const d=date||today();
+  return { date:d, label:"",
+    session: DB.sessions[d]? JSON.parse(JSON.stringify(DB.sessions[d])) : null,
+    strength: JSON.parse(JSON.stringify(DB.strength||{})),
+    prs: JSON.parse(JSON.stringify(DB.prs||[])),
+    streak: DB.streak||0 };
+}
 function undoLast(){
-  if(!UNDO||!UNDO.session){ toast("Nothing to undo"); return; }
-  DB.sessions[UNDO.session.date]=UNDO.session; UNDO=null;
-  save(); renderTrain(); toast("Put back");
+  if(!UNDO){ toast("Nothing to undo"); return; }
+  const u=UNDO; UNDO=null;
+  if(u.session) DB.sessions[u.date]=u.session; else delete DB.sessions[u.date];
+  DB.strength=u.strength; DB.prs=u.prs; DB.streak=u.streak;
+  save(); refresh(); toast("Put back");
+}
+
+/* ---------- stop, discard, delete ----------
+   Three different things, so the sheet says which is which. */
+function stopSheet(){
+  const w=W();
+  const live=!!(w.state.clock&&w.state.clock.startedAt);
+  const fin=!!w.state.finished;
+  const lg=loggedOn(w.date);
+  const what = lg.sets? plural(lg.sets,"set")+" across "+plural(lg.exercises,"exercise")+
+      (lg.prs? " and "+plural(lg.prs,"record"):"") : "nothing yet";
+  let body='<p class="muted" style="margin-bottom:18px">Logged today: <b>'+what+'</b>.</p>';
+  if(live && !fin){
+    body+='<button class="btn sec" onclick="closeSheet();endWorkout()"><span class="lbl">Stop and keep what I did</span></button>'+
+      '<p class="tiny dim" style="margin:8px 2px 18px">Saves the sets you completed and closes the session.</p>';
+  }
+  body+='<button class="btn danger" onclick="closeSheet();confirmDiscard()"><span class="lbl">'+
+      (fin?"I didn\'t actually do this":"Stop and throw it away")+'</span></button>'+
+    '<p class="tiny dim" style="margin:8px 2px 18px">Removes every set logged today from your history, '+
+      'takes back any record claimed today, and puts a fresh session in its place. Your check-in is kept.</p>'+
+    '<button class="btn ghost" onclick="closeSheet();confirmClear()"><span class="lbl">Clear today entirely</span></button>'+
+    '<p class="tiny dim" style="margin:8px 2px 0">No session at all today. You can rebuild it whenever you want.</p>';
+  openSheet(fin?"This session":"Stop the workout", body);
+}
+function confirmDiscard(){
+  const lg=loggedOn(today());
+  openSheet("Throw it away?",
+    '<p class="muted">'+(lg.sets? plural(lg.sets,"set")+" will be removed from your history"+
+      (lg.prs? " along with "+plural(lg.prs,"record") : "")+"." : "Nothing was logged, so there is nothing to remove.")+
+    ' A fresh '+esc((DB.sessions[today()]||{}).title||"session")+' takes its place.</p>'+
+    '<button class="btn danger" style="margin-top:20px" onclick="doDiscard(true)"><span class="lbl">Yes, it never happened</span></button>'+
+    '<button class="btn ghost" style="margin-top:10px" onclick="closeSheet()"><span class="lbl">Keep it</span></button>');
+}
+function confirmClear(){
+  openSheet("Clear today?",
+    '<p class="muted">Today becomes an empty day — no session, and anything logged today is removed. '+
+    'Rebuild it from the Train screen whenever you want.</p>'+
+    '<button class="btn danger" style="margin-top:20px" onclick="doDiscard(false)"><span class="lbl">Clear the day</span></button>'+
+    '<button class="btn ghost" style="margin-top:10px" onclick="closeSheet()"><span class="lbl">Keep it</span></button>');
+}
+function doDiscard(keepPlan){
+  const d=today();
+  UNDO=snapshotFor(d); UNDO.label="discard";
+  stopTicking();
+  discardSession(d,keepPlan);
+  closeSheet(); renderTrain(); toTop();
+  toast(keepPlan? "Discarded — fresh session ready" : "Today cleared");
+  pushCoach(keepPlan? "Wiped. That one doesn't count. Start it properly."
+                    : "Today cleared. Nothing logged.");
+}
+function deleteWorkout(){ stopSheet(); }
+
+/* Any day, not just today — from the calendar or from history. */
+function confirmDiscardDay(date){
+  if(date===today()){ closeSheet(); stopSheet(); return; }
+  const lg=loggedOn(date);
+  const s=(DB.sessions||{})[date]||{};
+  openSheet("Delete "+ukLong(date)+"?",
+    '<p class="muted">'+esc(s.title||"That session")+' will be removed'+
+      (lg.sets? ", along with "+plural(lg.sets,"set")+" logged that day"+
+        (lg.prs? " and "+plural(lg.prs,"record") : "")+"." : ".")+'</p>'+
+    '<button class="btn danger" style="margin-top:20px" onclick="doDiscardDay(\''+date+'\')"><span class="lbl">Delete it</span></button>'+
+    '<button class="btn ghost" style="margin-top:10px" onclick="closeSheet()"><span class="lbl">Keep it</span></button>');
+}
+function doDiscardDay(date){
+  UNDO=snapshotFor(date); UNDO.label="deleted "+uk(date);
+  discardSession(date,true);
+  closeSheet(); refresh();
+  toast(uk(date)+" deleted");
 }
 function rebuildWorkout(){
   const d=today();
@@ -3821,7 +3951,9 @@ function completeItem(id){
   if(w.state.work && w.state.work.itemId===id) w.state.work=null;
   const payload={};
   if(itemLoad(it)==="kg"&&it.weight) payload.w=it.weight;
-  if(it.time) payload.sec=it.time; else if(typeof it.reps==="number") payload.r=it.reps;
+  if(it.time) payload.sec=it.time;
+  else if(typeof it.reps==="number") payload.r=it.reps;
+  else if(it.reps) payload.txt=String(it.reps);     /* "20 steps" and the like */
   const pr=logSet(w,id,payload);
   w.state.done=w.state.done||{};
   w.state.done[doneKey(w,it)]={at:Date.now(),...payload};
@@ -4276,11 +4408,14 @@ function finishedHTML(w){
         const e=lastBefore(it.ex,addDays(w.date,1));
         const t=(e&&e.date===w.date)? topSet(e) : null;
         return '<div class="listrow"><span class="k">'+esc(it.ex)+'</span><span class="v num">'+
-          (t? (t.sec? t.sec+"s" : (t.w? kgTxt(t.w)+" × "+t.r : t.r+" reps")) : "—")+'</span></div>';
+          esc(setText(t))+'</span></div>';
       }).join("")).join("")+'</div>'+
     '<div class="btn-row" style="margin-top:16px">'+
       '<button class="btn sec" onclick="go(\'progress\')"><span class="lbl">Progress</span></button>'+
-      '<button class="btn sec" onclick="go(\'coach\')"><span class="lbl">Coach</span></button></div>';
+      '<button class="btn sec" onclick="go(\'coach\')"><span class="lbl">Coach</span></button></div>'+
+    '<button class="btn ghost sm" style="margin-top:12px" onclick="stopSheet()">'+
+      '<span class="lbl">I didn\'t actually do this</span></button>'+
+    (UNDO?'<button class="btn ghost sm" style="margin-top:10px" onclick="undoLast()"><span class="lbl">Undo</span></button>':'');
 }
 
 /* ---------- swap ---------- */
@@ -4505,8 +4640,9 @@ function sessionMenu(){
     '<div class="hair"></div>'+
     (live? '<button class="btn sec" onclick="closeSheet();endWorkout()"><span class="lbl">End and save what\'s done</span></button>':'')+
     '<button class="btn ghost" style="margin-top:10px" onclick="closeSheet();rebuildWorkout()"><span class="lbl">Rebuild the workout</span></button>'+
-    '<button class="btn danger" style="margin-top:10px" onclick="closeSheet();deleteWorkout()"><span class="lbl">Delete this workout</span></button>'+
-    (UNDO?'<button class="btn ghost" style="margin-top:10px" onclick="closeSheet();undoLast()"><span class="lbl">Undo the last change</span></button>':''));
+    '<button class="btn danger" style="margin-top:10px" onclick="closeSheet();stopSheet()"><span class="lbl">'+
+      (live?"Stop or throw it away":"Delete this workout")+'</span></button>'+
+    (UNDO?'<button class="btn ghost" style="margin-top:10px" onclick="closeSheet();undoLast()"><span class="lbl">Undo</span></button>':''));
 }
 function durationSheet(){
   const w=W();
@@ -4634,7 +4770,7 @@ function strengthRows(){
     .sort((a,b)=>b.sessions-a.sessions).slice(0,8);
   if(!lifts.length) return '<div class="empty">'+ICO.spark+'<p>Nothing logged yet. Finish a session and it fills in.</p></div>';
   return lifts.map(l=>'<div class="listrow"><span class="grow"><span class="k">'+esc(l.ex)+'</span>'+
-    '<div class="tiny dim num" style="margin-top:2px">'+(l.best? (l.best.sec? l.best.sec+"s best" : kgTxt(l.best.w)+" × "+l.best.r) : "—")+
+    '<div class="tiny dim num" style="margin-top:2px">'+(l.best? (l.best.sec? l.best.sec+"s best" : setText(l.best)) : "—")+
     ' · '+plural(l.sessions,"session")+'</div></span>'+
     '<span class="v">'+sparkline(l.series,86,30)+(l.delta>0?'<span class="chip good">+'+(Math.round(l.delta*10)/10)+'</span>':'')+'</span></div>').join("");
 }
