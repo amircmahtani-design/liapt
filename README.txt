@@ -1,5 +1,5 @@
 TRAIN — Lia's personal training app
-v2.0 · 14/09/2026
+v2.1 · 14/09/2026
 
 One HTML file, no build step. Firebase for the cloud copy, OpenAI for the
 coach's words only. Amir PT is untouched.
@@ -57,7 +57,8 @@ and can change the session by name.
 
 4. THE EXERCISE PICTURES
 ========================
-Drop them in the demos folder. Nothing needs registering.
+Drop them in the demos folder. Nothing needs registering, and a file you
+put there always wins over the built-in animation.
 
     Hip Thrust                  ->  demos/hip-thrust.jpg
     Romanian Deadlift           ->  demos/romanian-deadlift.jpg
@@ -85,8 +86,104 @@ coach borrows the movement pattern rather than the content.
 Open the Netlify URL in Safari -> Share -> Add to Home Screen.
 
 
-6. WHAT'S IN v2.0
-=================
+6. WHAT'S NEW IN v2.1 — THE COACH ACTUALLY COACHES
+==================================================
+THE PROGRAMME, NOT A FIXED LIST
+  Every Monday used to be the same nine movements. The five weekday
+  templates now describe the SHAPE of each day — how many blocks, how many
+  rounds, which movement pattern sits where — and the app chooses what fills
+  each slot from what she has actually done.
+
+  The 169 movements are grouped into ten categories: squat, hinge,
+  single-leg, glute isolation, push, pull, core, mobility, conditioning and
+  accessory. Rotation happens inside a category, so a squat is replaced by
+  another squat, never by a stretch.
+
+  Block A's first two loaded lifts are HELD for the four-week block so
+  progress on them can be measured. Everything else rotates.
+
+THE FOUR-WEEK BLOCK
+  Week 1  baseline — settle the technique
+  Week 2  one step up
+  Week 3  the strongest week
+  Week 4  lighter on purpose, a round off each block
+  Progression moves ONE variable at a time and the variable rotates: reps
+  until they reach the top of the range, then the weight goes up and the
+  reps reset, or a longer hold for a timed movement. Never both at once.
+  Settings -> Programme shows the week and can restart the block.
+
+THE RULES IT WILL NOT BREAK
+  Every session is checked before it reaches the screen:
+    · nothing she performed in either of the last two sessions
+    · no more than 40% carried over from the previous workout
+    · never the same workout inside 30 days
+    · nothing on hold after a pain report, nothing on her avoid list
+    · nothing needing kit she says she hasn't got today
+    · no overhead loading when the neck is up, no impact when the pelvic
+      symptoms are
+    · the minutes on the screen are the minutes it will take
+  Anything that fails is re-picked, up to four passes. If a category is
+  genuinely exhausted it widens into the neighbouring one, and if it still
+  has to repeat a movement it SAYS SO rather than repeating quietly.
+
+THE CHECK-IN
+  Four one-tap rows — energy, neck, where you're sore, how long — plus two
+  quiet pills: what you want from today ("Coach picks" by default) and what
+  kit you've got. Sore legs moves the day to upper body and alternates with
+  mobility rather than giving you the same session twice. Unticking the rack
+  keeps today buildable instead of prescribing a barbell you haven't got.
+
+WHY THIS?
+  A button on the home card and the ready screen. Three reasons at most,
+  every one from real data: the block week, a lift held for progress, what
+  the check-in changed, what the last session felt like.
+
+AFTER THE SESSION
+  Too easy / Just right / Too hard, then whether anything hurt, then an
+  optional best and worst movement. Too easy raises the numbers next time,
+  too hard holds them, a pain report takes the movement out until you put it
+  back (Settings -> Programme -> Movements on hold), and a movement you
+  dislike comes round less often. Skip something three times and it asks one
+  short question instead of prescribing it again.
+
+SWAP
+  Now leads with the three you actually want — Easier, Same level,
+  Different kit — each with a one-line reason. It never offers something on
+  hold, on the avoid list, or done in the last two days. What you choose is
+  remembered.
+
+THE COACH
+  Warm, confident and concise by default. The direct voice is still there in
+  Settings -> Session -> Coach's voice. It sees the last ten workouts, the
+  category balance, the block week, the held lifts, your feedback and what's
+  on hold — and today's session comes with the app's approved alternatives
+  already attached, so it chooses between options the rules have cleared
+  rather than inventing one. Every change it proposes goes through the same
+  validation; anything that breaks a rule is refused with the reason.
+  Without an API key it still answers, from the same engine.
+
+CANCEL WORKOUT
+  A plain "Cancel workout" on every live screen — warm-up, working set and
+  cool-down. One confirmation, and an undo afterwards.
+
+THE PHONE AND THE IPAD
+  No longer locked to portrait. In landscape the iPhone puts the picture
+  beside the prescription, the tab bar loses its second line and the rest
+  screen reads across, so Complete sits above the fold. The iPad gets the
+  two-column home and the same side-by-side working set. Pinch-zoom works
+  again.
+
+THE PICTURES
+  A picture in the demos folder now BEATS the built-in animation, which
+  lives on someone else's server. So the pictures you add are the ones she
+  sees. The folder is checked across jpg, webp, png and gif, so a folder of
+  webp is no longer mistaken for no folder at all.
+  Settings -> Programme -> Demonstration pictures -> Check walks all 169
+  movements and lists exactly which filenames are still missing, ready to
+  paste into the folder.
+
+7. WHAT WAS IN v2.0
+===================
 THE SCREENS
   Home is the greeting, the week and today's workout. The check-in is three
   taps — energy, neck, time — with "Say more" opening the full version if

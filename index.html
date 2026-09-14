@@ -197,11 +197,12 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 /* ---------- quick check-in ---------- */
 .qrow{display:flex;align-items:center;gap:var(--s3);padding:12px 0;border-bottom:1px solid var(--line-2);}
 .qrow:last-of-type{border-bottom:none;}
-.qrow .ql{width:70px;flex:0 0 70px;font-size:15px;font-weight:600;letter-spacing:-.01em;}
-@media(max-width:420px){ .qrow .ql{width:56px;flex:0 0 56px;font-size:14.5px;} .seg3 button{font-size:13.5px;} }
+.qrow .ql{width:62px;flex:0 0 62px;font-size:15px;font-weight:600;letter-spacing:-.01em;}
+@media(max-width:420px){ .qrow .ql{width:54px;flex:0 0 54px;font-size:14.5px;} }
+@media(min-width:1000px){ .seg3 button{font-size:14.5px;} }
 .seg3{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;background:var(--bg-2);padding:4px;
   border-radius:14px;flex:1;min-width:0;}
-.seg3 button{min-height:44px;min-width:0;border-radius:11px;font-size:14px;font-weight:600;color:var(--ink-2);
+.seg3 button{min-height:44px;min-width:0;border-radius:11px;font-size:13.5px;font-weight:600;color:var(--ink-2);
   padding:0 4px;white-space:nowrap;
   transition:background .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease);}
 .seg3 button.on{background:var(--blue);color:#fff;box-shadow:0 5px 12px -7px rgba(19,72,201,.9);}
@@ -559,6 +560,21 @@ details.sec[open] summary svg{transform:rotate(180deg);}
   .strip{padding:6px 6px 6px 14px;}
 }
 
+/* ---------- tablet ----------
+   An iPad has the width for the picture and the numbers to sit side by side,
+   which stops a placeholder body map filling half the screen. */
+@media (min-width:760px){
+  .ec{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch;
+    background:var(--surface);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--sh-2);}
+  .ec-media{aspect-ratio:auto;max-height:none;height:100%;min-height:300px;border-radius:0;}
+  .ec-media.noshot{aspect-ratio:auto;max-height:none;}
+  .ec-sheet{margin-top:0;border-radius:0;padding:var(--s5);display:flex;flex-direction:column;justify-content:center;}
+  .bleed{margin-inline:0;}
+  .durgrid{grid-template-columns:repeat(4,1fr);}
+  .photo-grid{grid-template-columns:repeat(4,1fr);}
+  .daytiles{grid-template-columns:repeat(6,1fr);}
+}
+
 /* ---------- phone in landscape ----------
    iPhone 17 on its side is ~874 x 402: wide, and very short. Everything
    that stacks in portrait sits side by side here, the tab bar loses its
@@ -704,7 +720,7 @@ details.sec[open] summary svg{transform:rotate(180deg);}
    IndexedDB, Firestore mirror, OpenAI for judgement only. Every state
    change is decided in code; the model explains, it never commands.
    ===================================================================== */
-const VERSION = "1.0";
+const VERSION = "2.1";
 const STORE_KEY = "lia_train_v1";
 const IDB_NAME = "liaTrain", IDB_STORE = "kv";
 
@@ -3799,7 +3815,8 @@ function fallbackAnalysis(ci,w,changes){
   if(ci.time==="short") head="Short session";
   const bits=[];
   if(changes.length) bits.push(changes.join(" "));
-  else bits.push("No changes needed — today's session stands as written.");
+  else if((w.why||[]).length) bits.push(w.why[0]);
+  else bits.push("Nothing needed changing — today stands as the programme wrote it.");
   bits.push(w.mins+" minutes.");
   return {headline:head, summary:FALLBACK_OPENERS[seed]+" "+bits.join(" ")};
 }
@@ -4546,14 +4563,27 @@ function weekStripHTML2(){
   const dots=wk.days.map(d=>'<div class="d'+(d.today?" today":"")+'">'+
     '<div class="lb">'+DOW[dowOf(d.date)]+'</div>'+
     '<div class="dot '+(d.done?"done":d.missed?"miss":d.rest?"":"plan")+'"></div></div>').join("");
-  const tiles=wk.days.map(d=>{
+  /* what a day actually is, not what the template says it would have been */
+  const labelFor=d=>{
+    const s=(DB.sessions||{})[d.date];
+    if(s && !s.deleted){ if(s.rest) return "Rest"; if(s.tag||s.title) return s.tag||s.title; }
     const p=dayPlan(d.date);
+    return p? (p.tag||p.title) : "Rest";
+  };
+  const train=wk.days.filter(d=>!d.rest);
+  const weekend=wk.days.filter(d=>d.rest);
+  const tile=d=>{
     const cls=["daytile"];
     if(d.today) cls.push("on"); else if(d.done) cls.push("done"); else if(d.rest) cls.push("off");
     return '<button class="'+cls.join(" ")+'" onclick="openDay(\''+d.date+'\')">'+
       '<span class="dy">'+DOW[dowOf(d.date)]+'</span>'+
-      '<span class="ds">'+(p? esc(p.tag||p.title) : "Rest")+'</span></button>';
-  }).join("");
+      '<span class="ds">'+esc(labelFor(d))+'</span></button>';
+  };
+  /* five training days and one weekend tile fill the grid evenly */
+  const tiles=train.map(tile).join("")+
+    (weekend.length? '<button class="daytile off'+(weekend.some(d=>d.today)?" on":"")+'" onclick="openDay(\''+weekend[0].date+'\')">'+
+      '<span class="dy">'+DOW[dowOf(weekend[0].date)]+(weekend[1]?'–'+DOW[dowOf(weekend[1].date)]:'')+'</span>'+
+      '<span class="ds">Rest</span></button>' : '');
   return '<div><div class="spread" style="margin-bottom:2px"><h3 style="font-size:19px">This week</h3>'+
     '<span class="chip '+(wk.done>=wk.planned?"good":"")+'">'+wk.done+' of '+wk.planned+'</span></div>'+
     '<div class="weekdots">'+dots+'</div><div class="daytiles">'+tiles+'</div></div>';
@@ -6423,7 +6453,7 @@ function openPrefsList(){
   const p=DB.exPrefs||{};
   const names=Object.keys(p).filter(n=>EX(n));
   const st=n=>(coach().exStats||{})[n]||{};
-  openSheet("Likes and avoids",
+  openSheet("What you like and avoid",
     (names.length
       ? names.map(n=>'<div class="listrow"><span class="grow"><span class="k">'+esc(n)+'</span>'+
           '<div class="tiny dim">'+(p[n].avoid?"never again":p[n].love?"more of this":"noted")+
@@ -6552,7 +6582,7 @@ function renderSettings(){
           ? DB.mediaScan.have+" of "+DB.mediaScan.total+" have a picture"
           : "Drop them in the demos folder, named after the movement")+'</div></span>'+
         '<button class="chip" onclick="checkMedia()">Check</button></div>'+
-      '<div class="listrow"><span class="grow"><span class="k">Movements she likes and avoids</span>'+
+      '<div class="listrow"><span class="grow"><span class="k">Movements you like and avoid</span>'+
         '<div class="tiny dim">'+plural(Object.keys(DB.exPrefs||{}).length,"movement")+' with a preference</div></span>'+
         '<button class="chip" onclick="openPrefsList()">Review</button></div>'+
     '</div>'+
