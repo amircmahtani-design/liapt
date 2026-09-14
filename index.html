@@ -229,7 +229,12 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 .media.ph svg{width:56%;height:56%;opacity:.5;}
 .media .addmedia{position:absolute;right:10px;bottom:10px;background:rgba(255,255,255,.92);color:var(--ink-2);
   font-size:12px;font-weight:600;padding:7px 12px;border-radius:999px;box-shadow:var(--sh-1);}
-.media.sm{aspect-ratio:1/1;border-radius:var(--r-sm);width:64px;flex:0 0 64px;}
+.media .borrowed{position:absolute;left:10px;top:10px;background:rgba(255,255,255,.92);color:var(--ink-3);
+  font-size:11px;font-weight:600;padding:6px 11px;border-radius:999px;box-shadow:var(--sh-1);
+  max-width:calc(100% - 20px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.media.loading .borrowed{display:none;}
+.media.sm{aspect-ratio:4/3;border-radius:var(--r-sm);width:76px;flex:0 0 76px;}
+.media.sm img,.media.sm video{object-position:left center;}
 .media.sm.ph svg{width:64%;height:64%;}
 
 /* inline svg sizing — every icon inherits a size from its component */
@@ -330,7 +335,7 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 .durtile.on .dt{color:#fff;} .durtile.on .dm{color:rgba(255,255,255,.8);}
 
 /* ---------- exercise card ---------- */
-.ec-media{position:relative;width:100%;aspect-ratio:4/3;max-height:44dvh;background:var(--surface-2);overflow:hidden;}
+.ec-media{position:relative;width:100%;aspect-ratio:16/10;max-height:44dvh;background:var(--surface-2);overflow:hidden;}
 .ec-media.noshot{aspect-ratio:16/9;max-height:26dvh;}
 .ec-media img,.ec-media video{width:100%;height:100%;object-fit:cover;display:block;}
 .ec-media .media,.ec-media .media.ph{width:100%;height:100%;aspect-ratio:auto;border-radius:0;}
@@ -419,7 +424,7 @@ details.sec[open] summary svg{transform:rotate(180deg);}
 .setdots i.on{background:var(--blue);transform:scale(1.15);}
 @media(min-width:900px){
   .bleed{margin-inline:0;}
-  .ec-media{border-radius:var(--r-xl) var(--r-xl) 0 0;aspect-ratio:16/9;}
+  .ec-media{border-radius:var(--r-xl) var(--r-xl) 0 0;aspect-ratio:16/10;}
   .ec-sheet{border-radius:0 0 var(--r-xl) var(--r-xl);margin-top:0;box-shadow:var(--sh-2);}
   .durgrid{grid-template-columns:repeat(4,1fr);}
 }
@@ -472,6 +477,13 @@ details.sec[open] summary svg{transform:rotate(180deg);}
 .whylist{margin:0;padding:0 0 0 20px;}
 .whylist li{font-size:15px;color:var(--ink);line-height:1.5;margin-bottom:10px;}
 .whylist li::marker{color:var(--blue);font-weight:600;}
+/* whether the coach can actually talk, said plainly */
+.aistat{display:flex;align-items:flex-start;gap:9px;padding:12px 14px;border-radius:var(--r-sm);
+  font-size:14px;font-weight:500;line-height:1.4;}
+.aistat svg{width:17px;height:17px;flex:0 0 17px;margin-top:1px;}
+.aistat.ok{background:var(--good-soft);color:var(--good);}
+.aistat.bad{background:var(--bad-soft);color:var(--bad);}
+.aistat.off{background:var(--warn-soft);color:var(--warn);}
 .deflist dt{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-top:var(--s4);}
 .deflist dd{margin:5px 0 0;font-size:15px;color:var(--ink-2);line-height:1.5;}
 
@@ -2073,6 +2085,193 @@ function bodyMap(muscles){
    order, so a folder of mixed formats needs no edits either.
    Only the exercise on screen and the rows she can see are requested, so a
    half-filled folder costs nothing. */
+/* ---------- the photographs ----------
+   One still for every movement in the catalogue, shot with the same model,
+   kit and studio, two positions left to right, at 1586x992 (16:10) to suit
+   the crop below. The map is baked in so the app never guesses at a
+   filename or waits on a 404 before it finds the right extension. */
+const EX_IMG = {
+  "90/90 Breathing":"90-90-breathing.webp",
+  "90/90 Hip Switch":"90-90-hip-switch.webp",
+  "90/90 Hold":"90-90-hold.webp",
+  "Ab Wheel Rollout":"ab-wheel-rollout.webp",
+  "B-stance Hip Thrust":"b-stance-hip-thrust.webp",
+  "B-stance Romanian Deadlift":"b-stance-romanian-deadlift.webp",
+  "Band Pass-through":"band-pass-through.webp",
+  "Band Pull-Apart":"band-pull-apart.webp",
+  "Band Pulldown":"band-pulldown.webp",
+  "Band-assisted Pull-up":"band-assisted-pull-up.webp",
+  "Banded Dead Bug":"banded-dead-bug.webp",
+  "Banded Lateral Walk":"banded-lateral-walk.webp",
+  "Banded Pallof Press":"banded-pallof-press.webp",
+  "Barbell Back Squat":"barbell-back-squat.webp",
+  "Barbell Row":"barbell-row.webp",
+  "Bear Crawl":"bear-crawl.webp",
+  "Bear Hold":"bear-hold.webp",
+  "Bench Dip":"bench-dip.webp",
+  "Bird Dog":"bird-dog.webp",
+  "Bodyweight Squat":"bodyweight-squat.webp",
+  "Box Squat":"box-squat.webp",
+  "Bulgarian Split Squat":"bulgarian-split-squat.webp",
+  "Burpee":"burpee.webp",
+  "Cable Chest Press":"cable-chest-press.webp",
+  "Cable Curl":"cable-curl.webp",
+  "Cable Kickback":"cable-kickback.webp",
+  "Cable Lateral Raise":"cable-lateral-raise.webp",
+  "Cable Pull-Through":"cable-pull-through.webp",
+  "Cable Standing Abduction":"cable-standing-abduction.webp",
+  "Cable Woodchop":"cable-woodchop.webp",
+  "Calf Raise":"calf-raise.webp",
+  "Cat-Cow":"cat-cow.webp",
+  "Chest-supported DB Row":"chest-supported-db-row.webp",
+  "Child's Pose":"child-s-pose.webp",
+  "Chin Tuck":"chin-tuck.webp",
+  "Clamshell":"clamshell.webp",
+  "Close-grip Push-up":"close-grip-push-up.webp",
+  "Connection Breath":"connection-breath.webp",
+  "Copenhagen Plank":"copenhagen-plank.webp",
+  "Cossack Squat":"cossack-squat.webp",
+  "Curtsy Lunge":"curtsy-lunge.webp",
+  "DB Chest Press":"db-chest-press.webp",
+  "DB Curl":"db-curl.webp",
+  "DB Floor Press":"db-floor-press.webp",
+  "DB Fly":"db-fly.webp",
+  "DB Romanian Deadlift":"db-romanian-deadlift.webp",
+  "DB Row":"db-row.webp",
+  "DB Shoulder Press":"db-shoulder-press.webp",
+  "DB Thruster":"db-thruster.webp",
+  "Dead Bug":"dead-bug.webp",
+  "Deadlift":"deadlift.webp",
+  "Decline Push-up":"decline-push-up.webp",
+  "Downward Dog":"downward-dog.webp",
+  "Face Pull":"face-pull.webp",
+  "Farmer Carry":"farmer-carry.webp",
+  "Figure Four (seated)":"figure-four-seated.webp",
+  "Frog Pump":"frog-pump.webp",
+  "Front Squat":"front-squat.webp",
+  "Glute Bridge":"glute-bridge.webp",
+  "Glute Bridge Hold":"glute-bridge-hold.webp",
+  "Glute Stretch":"glute-stretch.webp",
+  "Goblet Squat":"goblet-squat.webp",
+  "Good Morning":"good-morning.webp",
+  "Half-kneeling Hip Flexor Stretch":"half-kneeling-hip-flexor-stretch.webp",
+  "Half-kneeling Pallof Press":"half-kneeling-pallof-press.webp",
+  "Hammer Curl":"hammer-curl.webp",
+  "Hamstring Sweep":"hamstring-sweep.webp",
+  "Hanging Knee Raise":"hanging-knee-raise.webp",
+  "Hanging Leg Raise":"hanging-leg-raise.webp",
+  "Heel Slides":"heel-slides.webp",
+  "Heel Taps":"heel-taps.webp",
+  "Heel-elevated Goblet Squat":"heel-elevated-goblet-squat.webp",
+  "High Knees":"high-knees.webp",
+  "Hip Airplane":"hip-airplane.webp",
+  "Hip Hinge Drill":"hip-hinge-drill.webp",
+  "Hip Thrust":"hip-thrust.webp",
+  "Hollow Hold":"hollow-hold.webp",
+  "Hollow Rock":"hollow-rock.webp",
+  "Incline Plank":"incline-plank.webp",
+  "Incline Push-up":"incline-push-up.webp",
+  "Inverted Row":"inverted-row.webp",
+  "Jump Squat":"jump-squat.webp",
+  "Jumping Jack":"jumping-jack.webp",
+  "Kas Glute Bridge":"kas-glute-bridge.webp",
+  "Kettlebell Swing":"kettlebell-swing.webp",
+  "Landmine Press":"landmine-press.webp",
+  "Landmine Row":"landmine-row.webp",
+  "Lat Pulldown":"lat-pulldown.webp",
+  "Lateral Lunge":"lateral-lunge.webp",
+  "Lateral Raise":"lateral-raise.webp",
+  "Lateral Step":"lateral-step.webp",
+  "Leg Lowering":"leg-lowering.webp",
+  "Levator Scapulae Stretch":"levator-scapulae-stretch.webp",
+  "March in Place":"march-in-place.webp",
+  "Monster Walk":"monster-walk.webp",
+  "Mountain Climber":"mountain-climber.webp",
+  "Neck Rotation":"neck-rotation.webp",
+  "Nordic Curl":"nordic-curl.webp",
+  "Open Book":"open-book.webp",
+  "Overhead Triceps Extension":"overhead-triceps-extension.webp",
+  "Pallof Press":"pallof-press.webp",
+  "Pigeon Pose":"pigeon-pose.webp",
+  "Pistol Squat":"pistol-squat.webp",
+  "Plank":"plank.webp",
+  "Prone Y-T-W":"prone-y-t-w.webp",
+  "Pull-up":"pull-up.webp",
+  "Puppy Pose":"puppy-pose.webp",
+  "Push-up":"push-up.webp",
+  "Quadruped Hip Extension":"quadruped-hip-extension.webp",
+  "Reverse Crunch":"reverse-crunch.webp",
+  "Reverse Fly":"reverse-fly.webp",
+  "Reverse Lunge":"reverse-lunge.webp",
+  "Romanian Deadlift":"romanian-deadlift.webp",
+  "Row Intervals":"row-intervals.webp",
+  "Scapular Pull":"scapular-pull.webp",
+  "Scapular Push-up":"scapular-push-up.webp",
+  "Seated Cable Row":"seated-cable-row.webp",
+  "Seated Cat-Cow":"seated-cat-cow.webp",
+  "Seated Hamstring Stretch":"seated-hamstring-stretch.webp",
+  "Side Plank":"side-plank.webp",
+  "Side-lying Hip Abduction":"side-lying-hip-abduction.webp",
+  "Single-leg Balance":"single-leg-balance.webp",
+  "Single-leg Calf Raise":"single-leg-calf-raise.webp",
+  "Single-leg Glute Bridge":"single-leg-glute-bridge.webp",
+  "Single-leg Hip Thrust":"single-leg-hip-thrust.webp",
+  "Single-leg Romanian Deadlift":"single-leg-romanian-deadlift.webp",
+  "Skater":"skater.webp",
+  "Slow Mountain Climber":"slow-mountain-climber.webp",
+  "Smith Bench Press":"smith-bench-press.webp",
+  "Smith Squat":"smith-squat.webp",
+  "Sphinx Pose":"sphinx-pose.webp",
+  "Split Squat":"split-squat.webp",
+  "Squat Pulse":"squat-pulse.webp",
+  "Squat Thrust":"squat-thrust.webp",
+  "Stability Ball Hamstring Curl":"stability-ball-hamstring-curl.webp",
+  "Stability Ball Rollout":"stability-ball-rollout.webp",
+  "Step Jack":"step-jack.webp",
+  "Step-down":"step-down.webp",
+  "Step-up":"step-up.webp",
+  "Stir the Pot":"stir-the-pot.webp",
+  "Straight-arm Pulldown":"straight-arm-pulldown.webp",
+  "Suitcase Carry":"suitcase-carry.webp",
+  "Sumo DB Deadlift":"sumo-db-deadlift.webp",
+  "Sumo Deadlift":"sumo-deadlift.webp",
+  "Superman Hold":"superman-hold.webp",
+  "TRX Push-up":"trx-push-up.webp",
+  "TRX Row":"trx-row.webp",
+  "TRX Squat":"trx-squat.webp",
+  "Thoracic Extension":"thoracic-extension.webp",
+  "Thread the Needle":"thread-the-needle.webp",
+  "Triceps Pushdown":"triceps-pushdown.webp",
+  "Upper Trap Stretch":"upper-trap-stretch.webp",
+  "Walking Lunge":"walking-lunge.webp",
+  "Wall Angel":"wall-angel.webp",
+  "Wall Sit":"wall-sit.webp",
+  "Wall Slide":"wall-slide.webp",
+  "World's Greatest Stretch":"world-s-greatest-stretch.webp"
+};
+/* These band variants share the photograph of the movement they are built
+   on, and the card says so, until a banded still exists for each. */
+const EX_IMG_BORROWED = {
+  "Banded Chest Press":"Cable Chest Press",
+  "Banded Face Pull":"Face Pull",
+  "Banded Fire Hydrant":"Side-lying Hip Abduction",
+  "Banded Glute Bridge":"Glute Bridge",
+  "Banded Good Morning":"Good Morning",
+  "Banded Hip Thrust":"Hip Thrust",
+  "Banded Kickback":"Cable Kickback",
+  "Banded Reverse Lunge":"Reverse Lunge",
+  "Banded Romanian Deadlift":"Romanian Deadlift",
+  "Banded Row":"DB Row",
+  "Banded Squat":"Bodyweight Squat",
+  "Banded Woodchop":"Cable Woodchop"
+};
+function exImg(name){
+  if(EX_IMG[name]) return {file:EX_IMG[name], borrowed:null};
+  const p=EX_IMG_BORROWED[name];
+  if(p && EX_IMG[p]) return {file:EX_IMG[p], borrowed:p};
+  return null;
+}
+
 const DEMO_EXT=["jpg","webp","png","gif","mp4"];
 function slugOf(name){ return String(name).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
 function demoURL(name,i){ return "demos/"+slugOf(name)+"."+DEMO_EXT[i||0]; }
@@ -2083,8 +2282,9 @@ function isVideo(url){ return /\.(mp4|webm|mov)(\?|$)/i.test(String(url||"")); }
    over both. */
 function mediaFor(name){
   const o=(DB.media||{})[name]; if(o) return o;          /* one she pasted in herself */
+  const m=exImg(name); if(m) return "demos/"+m.file;     /* the photograph for this movement */
   if(MEDIA_OK[name]!=null) return demoURL(name,MEDIA_OK[name]);  /* a file that proved itself */
-  if(DEMOS_PRESENT!==false) return demoURL(name,0);      /* her folder gets first refusal */
+  if(DEMOS_PRESENT!==false) return demoURL(name,0);      /* anything else she drops in */
   const e=EX(name); if(e&&e.gif) return e.gif;           /* then the built-in animation */
   return null;
 }
@@ -2093,6 +2293,7 @@ const TRY_GIF=98, TRY_FIXED=99;
 /* True only when we know for certain there is a picture. */
 function hasRealMedia(name){
   if((DB.media||{})[name]) return true;
+  if(exImg(name)) return true;
   const e=EX(name); if(e&&e.gif) return true;
   return !!MEDIA_OK[name];
 }
@@ -2107,6 +2308,9 @@ let DEMOS_PRESENT=null;
    still a folder. */
 const PROBE_NAMES=["Hip Thrust","Glute Bridge","Romanian Deadlift","Goblet Squat","Push-up","Plank"];
 function probeDemos(){
+  /* The map already names files we know are there, so there is nothing to
+     probe and no 404 to spend. Only an unmapped movement needs the guess. */
+  if(Object.keys(EX_IMG).length){ DEMOS_PRESENT=true; return; }
   try{
     const tries=[];
     PROBE_NAMES.forEach(n=>DEMO_EXT.forEach((x,i)=>{ if(i<4) tries.push(demoURL(n,i)); }));
@@ -2124,8 +2328,9 @@ function mediaHTML(name,cls){
   const e=EX(name)||{};
   const small=(cls||"").indexOf("sm")>=0;
   let url=mediaFor(name);
-  /* thumbnails wait until we know the folder exists */
-  if(small && DEMOS_PRESENT!==true && !((DB.media||{})[name]||e.gif)) url=null;
+  /* thumbnails wait until we know the folder exists — a mapped photograph
+     is known to exist, so it never waits */
+  if(small && DEMOS_PRESENT!==true && !((DB.media||{})[name]||exImg(name)||e.gif)) url=null;
   const lab=(e.m||[]).slice(0,2).map(muscleLabel).join(" · ");
   const ph='<div class="media ph '+(cls||"")+'" data-ex="'+esc(name)+'">'+bodyMap(e.m||[])+
     ((!small&&lab)? '<figcaption>'+esc(lab)+'</figcaption>':'')+'</div>';
@@ -2135,13 +2340,17 @@ function mediaHTML(name,cls){
       'data-ex="'+esc(name)+'" data-try="99" onloadeddata="mediaOK(this)" onerror="mediaFailed(this)" '+
       'aria-label="'+esc(name)+' demonstration"></video></div>';
   /* how we got this url decides what happens if it fails to load */
-  const t = (DB.media||{})[name] ? TRY_FIXED
+  const mapped=exImg(name);
+  const t = ((DB.media||{})[name] || mapped) ? TRY_FIXED
           : (MEDIA_OK[name]!=null) ? MEDIA_OK[name]
           : (url===e.gif) ? TRY_GIF
           : 0;
+  /* a band variant showing the still of the movement it is built on says so */
+  const note=(mapped&&mapped.borrowed&&!small)
+    ? '<span class="borrowed">'+esc(mapped.borrowed)+' shown — add the band</span>' : '';
   return '<div class="media loading '+(cls||"")+'"><img src="'+esc(url)+'" alt="'+esc(name)+' demonstration"'+
     (small?' loading="lazy"':'')+' data-ex="'+esc(name)+'" data-try="'+t+'" data-t="'+Date.now()+'" '+
-    'onload="mediaOK(this)" onerror="mediaFailed(this)" /></div>';
+    'onload="mediaOK(this)" onerror="mediaFailed(this)" />'+note+'</div>';
 }
 function mediaOK(img){
   try{
@@ -3751,8 +3960,27 @@ function coachContext(){
   };
 }
 
+let AI_LAST = null;   /* the outcome of the last call, so Settings can explain itself */
+function aiStatus(){
+  if(!aiReady()) return {ok:false, code:"nokey", why:"no key on this device"};
+  if(!AI_LAST) return {ok:null, why:"not tried yet"};
+  return AI_LAST;
+}
+function aiExplain(st){
+  if(!st) return "";
+  if(st.ok) return "Live on "+(DB.ai.model||"gpt-4o-mini")+".";
+  switch(st.code){
+    case "nokey":   return "No key saved on this device. The programme still runs; only the words go quiet.";
+    case 401:       return "The key was rejected (401). Check it was copied whole, and that it belongs to this account.";
+    case 429:       return "Rate-limited or out of credit (429). Add credit at platform.openai.com \u2192 Billing.";
+    case 404:       return "That model isn't available to this account (404). Try gpt-4o-mini.";
+    case "network": return "Couldn't reach OpenAI. Check the connection and try again.";
+    case "timeout": return "OpenAI took too long to answer. Try again.";
+    default:        return st.why || "Something went wrong.";
+  }
+}
 async function aiJSON(system,user,schema,name,maxTokens){
-  if(!aiReady()) return null;
+  if(!aiReady()){ AI_LAST={ok:false,code:"nokey",why:"no key on this device"}; return null; }
   let ctl=null,timer=null;
   try{
     ctl=new AbortController(); timer=setTimeout(()=>{try{ctl.abort();}catch(e){}},45000);
@@ -3768,15 +3996,17 @@ async function aiJSON(system,user,schema,name,maxTokens){
     if(!res.ok){
       let m=""; try{ m=((await res.json()).error||{}).message||""; }catch(e){}
       console.warn("AI",res.status,m);
+      AI_LAST={ok:false, code:res.status, why:m||("HTTP "+res.status)};
       toast(res.status===401?"API key rejected — check Settings":"Coach unavailable ("+res.status+")");
       return null;
     }
     const j=await res.json();
     const txt=(((j.choices||[])[0]||{}).message||{}).content||"";
+    AI_LAST={ok:true, code:200, why:"ok", at:Date.now()};
     return JSON.parse(txt);
   }catch(e){
-    if(e&&e.name==="AbortError") toast("Coach timed out");
-    else console.warn("AI",e);
+    if(e&&e.name==="AbortError"){ AI_LAST={ok:false,code:"timeout",why:"timed out"}; toast("Coach timed out"); }
+    else { AI_LAST={ok:false,code:"network",why:String(e&&e.message||e)}; console.warn("AI",e); }
     return null;
   } finally { if(timer) clearTimeout(timer); }
 }
@@ -5200,8 +5430,26 @@ function renderTrain(){
 
   wrap.innerHTML=liveHead(w)+sessionStrip(w)+body;
   startTicking();
+  preloadNext(w,b);
 }
 
+/* Only ever two images in flight: the one on screen and the one after it. */
+let _preloaded={};
+function preloadNext(w,b){
+  try{
+    if(w.state.phase!=="work"||!b) return;
+    let next=b.items[w.state.i+1];
+    if(!next){
+      const nb=(w.blocks||[])[w.state.b+1];
+      next=(w.state.r<b.rounds)? b.items[0] : (nb? nb.items[0] : null);
+    }
+    if(!next) return;
+    const url=mediaFor(next.ex);
+    if(!url||_preloaded[url]) return;
+    _preloaded[url]=1;
+    const img=new Image(); img.decoding="async"; img.src=url;
+  }catch(e){}
+}
 function trainHead(title,sub){
   return '<div class="topbar"><div><h1>'+esc(title)+'</h1>'+(sub?'<div class="date">'+esc(sub)+'</div>':'')+'</div></div>';
 }
@@ -6540,9 +6788,15 @@ function renderSettings(){
   el("setWrap").innerHTML=backBar("Settings","","more")+
   '<div class="stack-lg">'+
     '<div class="card"><div class="eyebrow" style="margin-bottom:14px">Coach</div>'+
+      '<div class="aistat '+(aiReady()?(aiStatus().ok===false?"bad":"ok"):"off")+'">'+
+        ((aiReady() && aiStatus().ok!==false)? ICO.check : ICO.info)+
+        '<span>'+(aiReady()
+          ? "A key is saved on this device"+(DB.ai.key.length>8? " ("+esc(DB.ai.key.slice(0,3)+"…"+DB.ai.key.slice(-4))+")" : "")
+          : "No key on this device — the coach is running on rails")+'</span></div>'+
+      '<p class="tiny dim" style="margin:8px 2px 14px">'+esc(aiExplain(aiStatus()))+'</p>'+
       '<div class="field"><label>OpenAI API key</label>'+
         '<input class="txtin" id="setKey" type="password" placeholder="sk-..." value="'+esc(DB.ai.key||"")+'" />'+
-        '<div class="hint">Stored on this device. Without it the app still runs — the coach just stops talking.</div></div>'+
+        '<div class="hint">Stored on this device only, and never uploaded with the backup — so it has to be pasted on each phone or iPad separately. Without it the app still runs; only the words go quiet.</div></div>'+
       '<div class="field"><label>Model</label><select class="txtin" id="setModel">'+
         ["gpt-4o-mini","gpt-4o","gpt-4.1-mini","gpt-5-mini"].map(m=>'<option '+(DB.ai.model===m?"selected":"")+'>'+m+'</option>').join("")+
         '</select></div>'+
@@ -6620,7 +6874,10 @@ async function testAI(){
   const m=el("aiMsg"); m.textContent="Testing…";
   DB.ai.key=(el("setKey").value||"").trim(); DB.ai.model=el("setModel").value; save();
   const r=await aiJSON("Reply with the single word ready.","test",S_MESSAGE,"t",40);
-  m.textContent = r? "Connected. The coach is live." : "No reply — check the key and the model.";
+  const st=aiStatus();
+  m.textContent = r? ("Connected. "+aiExplain({ok:true})) : aiExplain(st);
+  m.style.color = r? "var(--good)" : "var(--bad)";
+  renderSettings();
 }
 function saveCloudSettings(){
   DB.cloud.syncId=(el("setSync").value||"").trim()||FB_SYNC_DEFAULT;

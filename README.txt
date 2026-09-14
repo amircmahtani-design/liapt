@@ -13,7 +13,7 @@ coach's words only. Amir PT is untouched.
     icon-180.png
     icon-512.png
     icon-1024.png
-    demos/            (the folder — exercise pictures go in here)
+    demos/            (the folder — 157 exercise pictures, already in it)
 
 Through the GitHub web UI as usual. It runs the moment Netlify deploys.
 
@@ -55,31 +55,28 @@ code. The key only buys better sentences and a coach that answers questions
 and can change the session by name.
 
 
-4. THE EXERCISE PICTURES
-========================
-Drop them in the demos folder. Nothing needs registering, and a file you
-put there always wins over the built-in animation.
+4. THE EXERCISE PICTURES — ALREADY DONE
+=======================================
+157 photographs ship in the demos folder, one per movement, and index.html
+carries a map from every exercise name to its file. Nothing to set up.
 
-    Hip Thrust                  ->  demos/hip-thrust.jpg
-    Romanian Deadlift           ->  demos/romanian-deadlift.jpg
-    90/90 Breathing             ->  demos/90-90-breathing.jpg
+Twelve band variants have no still of their own yet. Each shows the picture
+of the movement it is built on with a small label on the card saying so
+("Glute Bridge shown — add the band"). demos/README.txt lists the twelve
+filenames; drop one in and its label disappears.
 
-Lower case, hyphens for spaces and punctuation. jpg, webp, png, gif and mp4
-all work — an mp4 plays muted and loops. 4:3 landscape, 1200x900 or larger;
-the app crops to fill, so keep the body roughly centred.
+To replace a picture, use the filename it already has. To add one for a
+movement that has none, name it after the exercise in lower case with
+hyphens for spaces and punctuation — hip-thrust.webp, 90-90-breathing.webp.
+jpg, webp, png, gif and mp4 all work.
 
-Train-exercise-list.xlsx has the exact filename for all 169 movements.
-
-Anything without a picture shows a labelled body map of what the movement
-trains, so a half-filled folder never breaks a screen. There is also a
-per-exercise URL field (any exercise -> How? -> Add a demonstration) if you
-ever want to point at something hosted elsewhere.
+    More -> Settings -> Programme -> Demonstration pictures -> Check
+walks all 169 movements and lists exactly what is still missing.
 
 Nothing from Instagram or any other subscription is downloaded or embedded.
 A movement she likes from Senada Greca or Zubalenok is saved in
 More -> My references as a name, a link, a target muscle and a note, and the
 coach borrows the movement pattern rather than the content.
-
 
 5. ON THE PHONE
 ===============

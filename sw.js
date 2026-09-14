@@ -1,6 +1,8 @@
 /* Train — app shell cache. Network first for the page so a new upload is
-   picked up immediately; cache is the fallback when the phone is offline. */
-const CACHE = "train-v1";
+   picked up immediately; cache is the fallback when the phone is offline.
+   The exercise photographs are cached the first time each one is shown, so
+   they work offline afterwards without fetching all 157 at startup. */
+const CACHE = "train-v2";
 const SHELL = ["./","./index.html","./manifest.json","./icon-180.png","./icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
