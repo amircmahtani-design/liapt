@@ -136,7 +136,22 @@ WHY THIS?
   the check-in changed, what the last session felt like.
 
 AFTER THE SESSION
-  Too easy / Just right / Too hard, then whether anything hurt, then an
+  First: do you want this workout again? Thumbs up or thumbs down.
+
+    Thumbs up    the session is kept exactly as it was and comes back on the
+                 same day next week, one step heavier on everything that can
+                 be loaded. It compounds — 20 kg, then 21.25, then 22.5 —
+                 because it steps up from what she actually lifted last time,
+                 not from what was written. It holds for the rest of the
+                 four-week block, then the rotation takes back over. The
+                 ready screen shows a "back by request" chip, and "Build me a
+                 different one" cancels it.
+
+    Thumbs down  that exact combination is never built again, at any distance
+                 in time, and the movements in it lose a little ground so
+                 they come round less often.
+
+  Then: too easy / just right / too hard, whether anything hurt, and an
   optional best and worst movement. Too easy raises the numbers next time,
   too hard holds them, a pain report takes the movement out until you put it
   back (Settings -> Programme -> Movements on hold), and a movement you

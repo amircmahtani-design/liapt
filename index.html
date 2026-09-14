@@ -110,6 +110,22 @@ p{margin:0;text-wrap:pretty;}
 .btn.danger{background:var(--bad-soft);color:var(--bad);box-shadow:none;}
 .btn.sec.on{background:var(--blue);color:#fff;border-color:var(--blue);
   box-shadow:0 5px 12px -7px rgba(19,72,201,.9);}
+/* the verdict on the whole session */
+.thumbs{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);margin-top:12px;}
+.thumb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  min-height:96px;padding:12px 10px;border-radius:var(--r);background:var(--surface-2);
+  border:1.5px solid transparent;color:var(--ink-2);
+  transition:transform .16s var(--ease),background .16s var(--ease),border-color .16s var(--ease);}
+.thumb:active{transform:scale(.97);}
+.thumb svg{width:24px;height:24px;margin-bottom:2px;}
+.thumb .t{font-size:15.5px;font-weight:600;letter-spacing:-.01em;color:var(--ink);}
+.thumb .s{font-size:11.5px;color:var(--ink-3);text-align:center;line-height:1.3;}
+.thumb.on.up{background:var(--good-soft);border-color:var(--good);}
+.thumb.on.up svg,.thumb.on.up .t{color:var(--good);}
+.thumb.on.up .s{color:var(--good);opacity:.8;}
+.thumb.on.down{background:var(--bad-soft);border-color:var(--bad);}
+.thumb.on.down svg,.thumb.on.down .t{color:var(--bad);}
+.thumb.on.down .s{color:var(--bad);opacity:.8;}
 .btn[disabled]{opacity:.42;pointer-events:none;}
 .btn svg{width:19px;height:19px;flex:0 0 auto;}
 .btn.loading{pointer-events:none;}
@@ -812,6 +828,8 @@ const DEFAULTS = {
     blocked:{},          /* exercise -> {why, since} after a pain report */
     sigs:[],             /* recent session signatures, for the 30-day rule */
     asked:{},            /* exercise -> the day we asked why it keeps getting skipped */
+    favourites:{},       /* day -> a session she gave a thumbs up, to run again heavier */
+    rejected:[],         /* sessions she gave a thumbs down — never built again */
     nonce:0              /* bumped by a deliberate rebuild, so it differs */
   }
 };
@@ -970,7 +988,9 @@ const ICO={
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg>',
   up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14.5l6-6 6 6"/></svg>',
   spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.8L18.5 10.5 13.7 12.2 12 17l-1.7-4.8L5.5 10.5l4.8-1.7z"/></svg>',
-  kit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="11" rx="2.5"/><path d="M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8"/></svg>'
+  kit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="11" rx="2.5"/><path d="M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 10.5v9H4.5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z"/><path d="M7 10.5l4.2-6.6a1.6 1.6 0 0 1 2.9 1v3.6h4.6a1.9 1.9 0 0 1 1.85 2.35l-1.3 5.8A2.4 2.4 0 0 1 16.9 19.5H7z"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 13.5v-9H4.5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1z"/><path d="M7 13.5l4.2 6.6a1.6 1.6 0 0 0 2.9-1v-3.6h4.6a1.9 1.9 0 0 0 1.85-2.35l-1.3-5.8A2.4 2.4 0 0 0 16.9 4.5H7z"/></svg>'
 };
 function backBar(title,sub,target){
   return '<div class="topbar"><div class="row" style="gap:10px"><button class="xbtn" onclick="go(\''+target+'\')" aria-label="Back">'+ICO.back+
@@ -2578,6 +2598,7 @@ function coach(){
   c.anchors=c.anchors||{}; c.progress=c.progress||{}; c.feedback=c.feedback||[];
   c.exStats=c.exStats||{}; c.blocked=c.blocked||{}; c.sigs=c.sigs||[];
   c.asked=c.asked||{}; c.nonce=c.nonce||0;
+  c.favourites=c.favourites||{}; c.rejected=c.rejected||[];
   return c;
 }
 function exStat(ex){ const c=coach(); return c.exStats[ex] || (c.exStats[ex]={done:0,skipped:0,loved:0,disliked:0}); }
@@ -2769,6 +2790,7 @@ function scoreCandidate(nm,slot,ctx){
   }
   const st=(c.exStats||{})[nm]||{};
   s += (st.loved||0)*5 - (st.disliked||0)*6 - Math.max(0,(st.skipped||0)-(st.done||0))*8;
+  s -= (st.inDisliked||0)*2;                   /* it was in a session she thumbed down */
   if((ctx.prefs[nm]||{}).love) s+=5;
   if((DB.prefs.favourEquipment||[]).includes(e.eq)) s+=4;
   if(hasRealMedia(nm)) s+=3;
@@ -2939,7 +2961,7 @@ function overlapWithPrevious(w,ctx){
   const prev=new Set(ctx.prevExercises);
   return names.filter(n=>prev.has(n)).length/names.length;
 }
-function validateSession(w,ctx){
+function validateSession(w,ctx,opts){
   const issues=[];
   const c=coach();
   const seen=new Set();
@@ -2959,7 +2981,8 @@ function validateSession(w,ctx){
   const ov=overlapWithPrevious(w,ctx);
   if(ov>0.4) issues.push({code:"overlap",msg:Math.round(ov*100)+"% of this session was in the last one"});
   const sig=sessionSignature(w);
-  if((c.sigs||[]).some(x=>x.sig===sig && x.date!==w.date && daysBetween(x.date,w.date)<30))
+  if(isRejected(sig)) issues.push({code:"rejected",msg:"she gave this session a thumbs down"});
+  if(!(opts&&opts.replay) && (c.sigs||[]).some(x=>x.sig===sig && x.date!==w.date && daysBetween(x.date,w.date)<30))
     issues.push({code:"repeat",msg:"this exact session ran inside the last 30 days"});
   const mins=estimateMinutes(w);
   if(w.targetMins && Math.abs(mins-w.targetMins) > Math.max(8,w.targetMins*0.25))
@@ -2969,9 +2992,9 @@ function validateSession(w,ctx){
 
 /* Re-pick whatever failed, a bounded number of times, then accept what is
    left rather than hand her an empty screen. */
-function repairSession(w,ctx){
+function repairSession(w,ctx,opts){
   for(let pass=0; pass<4; pass++){
-    const issues=validateSession(w,ctx);
+    const issues=validateSession(w,ctx,opts);
     const fixable=issues.filter(i=>i.itemId);
     const structural=issues.filter(i=>i.code==="overlap"||i.code==="repeat");
     if(!fixable.length && !structural.length) return issues;
@@ -3004,7 +3027,7 @@ function repairSession(w,ctx){
     if(!changed) break;
     w.mins=estimateMinutes(w);
   }
-  return validateSession(w,ctx);
+  return validateSession(w,ctx,opts);
 }
 
 
@@ -3032,7 +3055,9 @@ function recordFeedback(w,fb){
     (prev.disliked||[]).forEach(ex=>{ const st=c.exStats[ex]; if(st) st.disliked=Math.max(0,(st.disliked||0)-1); });
     (prev.pain||[]).forEach(ex=>{ if(c.blocked[ex] && c.blocked[ex].from===w.date) delete c.blocked[ex]; });
   }
-  const rec={ date:w.date, effort:fb.effort||(prev&&prev.effort)||"right",
+  const rec={ date:w.date,
+              effort: fb.effort!==undefined? fb.effort : ((prev&&prev.effort)||null),
+              rating: fb.rating!==undefined? fb.rating : (prev&&prev.rating)||null,
               pain:one(fb.painEx||fb.pain), loved:one(fb.loved), disliked:one(fb.disliked),
               at:Date.now() };
   c.feedback=(c.feedback||[]).filter(f=>f.date!==w.date);
@@ -3064,6 +3089,115 @@ function answerSkip(ex,answer){
   else if(answer==="hard"){ const e=EX(ex); if(e&&e.easier&&EX(e.easier)) DB.exPrefs[e.easier]={...(DB.exPrefs[e.easier]||{}),love:true}; exStat(ex).disliked++; }
   save(); closeSheet(); toast("Noted — you'll see less of it");
   if(CUR==="train") renderTrain();
+}
+
+/* ---------- thumbs up, thumbs down ----------
+   The three-way question at the end is about intensity. This one is about
+   whether she wants the session back at all, and it overrules the rotation
+   rules in both directions — she asked, so the engine does as it is told.
+
+   Up   : keep this exact session for the rest of the block and run it again
+          with more weight each time.
+   Down : this combination never gets built again, and the movements that
+          were only in it lose a little ground. */
+function sessionShape(w){
+  return {
+    sig: sessionSignature(w),
+    title:w.title, tag:w.tag, kind:w.kind, focus:w.focus, dayKey:w.dayKey,
+    duration:w.duration, targetMins:w.targetMins, mode:w.mode,
+    blocks:(w.blocks||[]).map(b=>({
+      label:b.label, rounds:b.rounds, rest:b.rest, flow:!!b.flow, straight:!!b.straight,
+      items:b.items.map(i=>({ ex:i.ex, reps:i.reps, time:i.time, side:!!i.side,
+                              weight:i.weight, role:i.role, cat:i.cat, slot:i.slot }))
+    }))
+  };
+}
+/* The heaviest set she actually completed on a movement, so a repeat steps
+   up from what happened rather than from what was written. */
+function achievedWeight(ex,dateISO){
+  const e=(history(ex)||[]).find(x=>x.date===dateISO);
+  if(!e) return null;
+  let best=0;
+  (e.sets||[]).forEach(st=>{ if((st.w||0)>best) best=st.w||0; });
+  return best||null;
+}
+function loadStep(kg){ return kg<10? 0.5 : kg<30? 1.25 : 2.5; }
+function likeSession(w){
+  const c=coach();
+  const shape=sessionShape(w);
+  /* record what she actually lifted, so next week starts from the truth */
+  shape.blocks.forEach(b=>b.items.forEach(i=>{
+    const got=achievedWeight(i.ex,w.date);
+    if(got) i.weight=got;
+  }));
+  const prev=c.favourites[w.dayKey];
+  shape.since = (prev && prev.sig===shape.sig)? prev.since : w.date;
+  shape.runs  = (prev && prev.sig===shape.sig)? (prev.runs||1)+1 : 1;
+  shape.liked = w.date;
+  c.favourites[w.dayKey]=shape;
+  c.rejected=(c.rejected||[]).filter(r=>r.sig!==shape.sig);
+  save();
+  return shape;
+}
+function dislikeSession(w){
+  const c=coach();
+  const sig=sessionSignature(w);
+  if(!(c.rejected||[]).some(r=>r.sig===sig))
+    c.rejected.push({sig, title:w.title, date:w.date});
+  if(c.rejected.length>80) c.rejected=c.rejected.slice(-80);
+  /* if this was the session she had asked to keep, it is not any more */
+  Object.keys(c.favourites||{}).forEach(k=>{ if(c.favourites[k].sig===sig) delete c.favourites[k]; });
+  /* a whole session is a weak signal about any one movement, so it nudges
+     rather than bans */
+  exercisesIn(w).forEach(ex=>{ const st=exStat(ex); st.inDisliked=(st.inDisliked||0)+1; });
+  save();
+}
+function clearRating(w){
+  const c=coach();
+  const sig=sessionSignature(w);
+  c.rejected=(c.rejected||[]).filter(r=>r.sig!==sig);
+  Object.keys(c.favourites||{}).forEach(k=>{ if(c.favourites[k].sig===sig) delete c.favourites[k]; });
+  save();
+}
+function isRejected(sig){ return (coach().rejected||[]).some(r=>r.sig===sig); }
+/* A favourite is hers for the rest of the four-week block; then the block
+   turns over and the rotation takes back the wheel. */
+function favouriteFor(dateISO,plan){
+  const c=coach();
+  const f=c.favourites[plan&&plan.key];
+  if(!f) return null;
+  if(daysBetween(f.since,dateISO)>=28){ delete c.favourites[plan.key]; return null; }
+  if(daysBetween(f.liked,dateISO)<1) return null;   /* not on the day she liked it */
+  return f;
+}
+/* The heaviest she has lifted on a movement before a given day. */
+function latestWeight(ex,beforeISO){
+  const e=lastBefore(ex,beforeISO);
+  const t=topSet(e);
+  return (t&&t.w)||null;
+}
+/* Rebuild a liked session, one step heavier everywhere it can be loaded.
+   Each repeat steps up from the last time she actually did it, so the weight
+   compounds week by week instead of adding the same kilo for ever. */
+function replayFavourite(f,dateISO){
+  const lifted=[];
+  const blocks=f.blocks.map(b=>({
+    label:b.label, rounds:b.rounds, rest:b.rest, flow:b.flow, straight:b.straight,
+    items:b.items.map(src=>{
+      if(!EX(src.ex)) return null;
+      const it=newItem({ex:src.ex, reps:src.reps, time:src.time, side:src.side});
+      it.slot=src.slot; it.role=src.role; it.cat=src.cat;
+      const base = latestWeight(src.ex,dateISO) || achievedWeight(src.ex,f.liked) || src.weight || it.weight;
+      if(base && isLoadable(src.ex)){
+        it.weight = roundLoad(base + loadStep(base));
+        it.progressKind="load";
+        it.progressWhy = kgTxt(base)+" to "+kgTxt(it.weight);
+        lifted.push({ex:src.ex, from:base, to:it.weight});
+      } else if(base){ it.weight=base; }
+      return it;
+    }).filter(Boolean)
+  })).filter(b=>b.items.length);
+  return {blocks, lifted};
 }
 
 /* ---------- why this workout ----------
@@ -3416,6 +3550,37 @@ function buildSession(dateISO,mode){
   const c=coach();
   const taken=new Set();
   const kept=[], rotated=[];
+
+  /* She gave this day a thumbs up, so it comes back — same session, heavier.
+     Only until the block turns over, and only while nothing else has ruled a
+     movement out. */
+  const fav = (ci && ci.focus && ci.focus!=="auto")? null : favouriteFor(date,plan);
+  if(fav && durKey===fav.duration){
+    const r=replayFavourite(fav,date);
+    const w={
+      date, dayKey:plan.key, title:fav.title, tag:fav.tag, kind:fav.kind, focus:fav.focus,
+      mode:fav.mode, duration:durKey, targetMins:fav.targetMins||targetMins,
+      blockWeek:ctx.week, replay:true, replayRun:(fav.runs||1)+1,
+      prep:buildPrep(plan.focus,neck),
+      blocks:r.blocks,
+      cooldown:buildCooldownV(plan.focus,date,ctx.nonce),
+      adjustments:[], analysis:null, generatedAt:Date.now(), edited:false,
+      state:freshState(), log:{}
+    };
+    w.mins=estimateMinutes(w);
+    /* pain, kit and the neck still get the last word on a repeat */
+    w.issues=repairSession(w,ctx,{replay:true});
+    w.mins=estimateMinutes(w);
+    rememberSignature(w);
+    const lift=r.lifted[0];
+    w.why=[
+      "You gave this one a thumbs up, so it's back.",
+      lift? ("Heavier where it counts — "+lift.ex+" "+kgTxt(lift.from)+" to "+kgTxt(lift.to)+".")
+          : "Same session, same numbers — nothing here loads up.",
+      BLOCK_NOTE[ctx.week]
+    ].filter(Boolean).slice(0,3);
+    return w;
+  }
 
   const blocks = slotsFor(plan,variant).map(sb=>({
     label:sb.label, rounds:sb.rounds, rest:sb.rest, flow:sb.flow, straight:sb.straight,
@@ -5255,10 +5420,15 @@ function rebuildWorkout(){
   const prev=DB.sessions[d];
   UNDO=snapshotFor(d); UNDO.label="rebuild";
   coach().nonce=(coach().nonce||0)+1;   /* ask again and you get a different answer */
+  /* asking for a different one on a day she had asked to keep is her changing
+     her mind — the favourite steps aside rather than rebuilding itself */
+  let dropped=false;
+  if(prev && prev.replay && prev.dayKey){ delete coach().favourites[prev.dayKey]; dropped=true; }
   regenerate(d,(prev&&prev.duration)||DB.prefs.lastDuration||"full");
   const ci=checkinOn(d);
   if(ci&&ci.analysed) applyCheckin(DB.sessions[d],ci);
-  save(); renderTrain(); toast("Rebuilt");
+  save(); renderTrain();
+  toast(dropped? "Something different — that one won't repeat now" : "Rebuilt");
 }
 
 /* ---------- flow ---------- */
@@ -5500,6 +5670,7 @@ function readyHTML(w){
         '<span class="chip">'+plural((w.blocks||[]).length,"block")+'</span>'+
         '<span class="chip">'+plural((w.prep||[]).length,"warm-up move")+'</span>'+
         (w.adjustments&&w.adjustments.length?'<span class="chip warn">adjusted</span>':'')+
+        (w.replay?'<span class="chip good">'+ICO.up+'back by request</span>':'')+
         '<button class="chip blue" onclick="whySheet()">'+ICO.info+'Why this?</button>'+
       '</div>'+
       '<button class="btn big" onclick="startWorkout()">'+ICO.play+
@@ -5736,8 +5907,11 @@ function coolHTML(w){
 let FB_STEP = null;
 function fbCard(w){
   const fb=feedbackFor(w.date);
-  if(fb && FB_STEP!=="open"){
-    const bits=[EFFORT_LABEL[fb.effort]||"Logged"];
+  if(fb && FB_STEP===null && (fb.rating||fb.effort)){
+    const bits=[];
+    if(fb.rating==="up") bits.push("Wants it again, heavier");
+    else if(fb.rating==="down") bits.push("Not this one again");
+    if(fb.effort && EFFORT_LABEL[fb.effort]) bits.push(EFFORT_LABEL[fb.effort]);
     if(fb.pain.length) bits.push("pain on "+fb.pain.join(", "));
     if(fb.loved.length) bits.push("liked "+fb.loved.join(", "));
     if(fb.disliked.length) bits.push("disliked "+fb.disliked.join(", "));
@@ -5746,12 +5920,21 @@ function fbCard(w){
       '<div class="small muted" style="margin-top:3px">'+esc(bits.join(" · "))+'</div></span>'+
       '<button class="chip" onclick="FB_STEP=\'open\';renderTrain()">Change</button></div></div>';
   }
-  const step = FB_STEP || (fb? "open" : "effort");
+  const step = FB_STEP || (fb? "open" : "rating");
   const eff=k=>'<button class="btn sec sm'+((fb&&fb.effort===k)?" on":"")+'" onclick="fbEffort(\''+k+'\')">'+
     '<span class="lbl">'+EFFORT_LABEL[k]+'</span></button>';
-  let body='<div class="eyebrow">How did that feel?</div>'+
-    '<div class="btn-row" style="margin-top:10px">'+eff("easy")+eff("right")+eff("hard")+'</div>';
-  if(step!=="effort"){
+  const thumb=(k,ico,t,sub)=>'<button class="thumb'+((fb&&fb.rating===k)?" on "+k:"")+'" onclick="fbRate(\''+k+'\')">'+
+    ico+'<span class="t">'+t+'</span><span class="s">'+sub+'</span></button>';
+  let body='<div class="eyebrow">Do you want this workout again?</div>'+
+    '<div class="thumbs">'+
+      thumb("up",ICO.up,"Yes","Run it again, heavier")+
+      thumb("down",ICO.down,"No","Don\'t build this one again")+
+    '</div>';
+  if(step!=="rating"){
+    body+='<div class="hair"></div><div class="eyebrow">How did that feel?</div>'+
+      '<div class="btn-row" style="margin-top:10px">'+eff("easy")+eff("right")+eff("hard")+'</div>';
+  }
+  if(step!=="rating" && step!=="effort"){
     body+='<div class="hair"></div><div class="eyebrow">Anything hurt?</div>'+
       '<div class="btn-row" style="margin-top:10px">'+
         '<button class="btn sec sm" onclick="fbNoPain()"><span class="lbl">No</span></button>'+
@@ -5770,14 +5953,31 @@ function fbCard(w){
 }
 const EFFORT_LABEL={easy:"Too easy",right:"Just right",hard:"Too hard"};
 function fbEffort(k){
-  const w=W(); recordFeedback(w,{effort:k, loved:(feedbackFor(w.date)||{}).loved, disliked:(feedbackFor(w.date)||{}).disliked, pain:(feedbackFor(w.date)||{}).pain});
+  const w=W(); const cur=feedbackFor(w.date)||{};
+  recordFeedback(w,{effort:k, rating:cur.rating, loved:cur.loved, disliked:cur.disliked, pain:cur.pain});
   FB_STEP = FB_STEP==="open"? "open" : "pain";
   renderTrain();
   toast(k==="easy"?"Noted — next one steps up":k==="hard"?"Noted — next one eases off":"Noted");
 }
+/* The whole-session verdict. Up keeps it and adds weight; down retires it. */
+function fbRate(k){
+  const w=W(); const cur=feedbackFor(w.date)||{};
+  const same = cur.rating===k;
+  const next = same? null : k;
+  recordFeedback(w,{effort:cur.effort, rating:next, loved:cur.loved, disliked:cur.disliked, pain:cur.pain});
+  if(next==="up"){
+    likeSession(w);
+    toast("Saved — you'll get this one again, heavier");
+  } else if(next==="down"){
+    dislikeSession(w);
+    toast("Retired — this workout won't come back");
+  } else { clearRating(w); toast("Cleared"); }
+  FB_STEP = FB_STEP==="open"? "open" : "effort";
+  renderTrain();
+}
 function fbNoPain(){
   const w=W(); const cur=feedbackFor(w.date)||{};
-  recordFeedback(w,{effort:cur.effort, loved:cur.loved, disliked:cur.disliked, pain:[]});
+  recordFeedback(w,{effort:cur.effort, rating:cur.rating, loved:cur.loved, disliked:cur.disliked, pain:[]});
   FB_STEP = FB_STEP==="open"? "open" : "extras";
   renderTrain();
 }
@@ -5797,7 +5997,7 @@ function fbPick(kind){
 }
 function fbSet(kind,ex){
   const w=W(); const cur=feedbackFor(w.date)||{};
-  const next={effort:cur.effort, pain:cur.pain||[], loved:cur.loved||[], disliked:cur.disliked||[]};
+  const next={effort:cur.effort, rating:cur.rating, pain:cur.pain||[], loved:cur.loved||[], disliked:cur.disliked||[]};
   if(kind==="pain") next.pain=[...new Set([...(next.pain||[]),ex])];
   if(kind==="loved") next.loved=[...new Set([...(next.loved||[]),ex])];
   if(kind==="disliked") next.disliked=[...new Set([...(next.disliked||[]),ex])];
