@@ -184,7 +184,7 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 
 /* ---------- media / exercise tiles ---------- */
 .media{position:relative;width:100%;aspect-ratio:16/10;border-radius:var(--r);overflow:hidden;background:var(--surface-2);}
-.media img{width:100%;height:100%;object-fit:cover;display:block;}
+.media img,.media video{width:100%;height:100%;object-fit:cover;display:block;}
 .media.ph{display:grid;place-items:center;background:linear-gradient(160deg,#EEF1F7,#E4E8F2);}
 .media.ph svg{width:56%;height:56%;opacity:.5;}
 .media .addmedia{position:absolute;right:10px;bottom:10px;background:rgba(255,255,255,.92);color:var(--ink-2);
@@ -251,7 +251,7 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 /* A body map earns less room than a real demonstration. Either way the
    Complete button has to stay above the fold on a phone. */
 .ec-media.noshot{aspect-ratio:16/9;max-height:26dvh;}
-.ec-media img{width:100%;height:100%;object-fit:cover;display:block;}
+.ec-media img,.ec-media video{width:100%;height:100%;object-fit:cover;display:block;}
 .ec-media .media,.ec-media .media.ph{width:100%;height:100%;aspect-ratio:auto;border-radius:0;}
 .ec-media .media.ph{background:linear-gradient(170deg,#F7FAFF 0%,var(--wave-1) 60%,var(--wave-2) 100%);}
 .ec-media .media.ph svg{width:46%;height:46%;opacity:.85;}
@@ -573,7 +573,7 @@ const PROFILE_DEFAULT = {
   goals:["Build and shape glutes","Strengthen and define the back","Visible abdominal definition",
          "Pelvic and trunk stability","Stronger and more defined at the same weight","Train without neck pain"],
   avoid:"No disproportionately large upper body. Strength and shape, not size up top.",
-  likes:["Deadlift","Push-up","Chest Press","Cable Row"],
+  likes:["Deadlift","Push-up","Chest Press","Cable Row","Resistance bands"],
   sessionMins:60, shortMins:20, daysPerWeek:5,
   csection:"C-section approximately one year ago. No current movement restrictions.",
   equipment:"Brute Force 360 PTX rack with dual cable stacks and Smith; Olympic barbell and plates; fixed dumbbells to 10 kg; TRX; resistance bands; Concept2 RowERG; adjustable bench; mat; kettlebell; stability ball."
@@ -598,7 +598,10 @@ const DEFAULTS = {
   streak: 0,
   ai: { key:"", model:"gpt-4o-mini" },
   cloud: { on:true, syncId:FB_SYNC_DEFAULT, collection:FB_COLLECTION, last:null, syncKeys:false },
-  prefs: { rest:75, restCircuit:90, sound:true, cycleOn:true, coachTone:"military" },
+  prefs: { rest:75, restCircuit:90, sound:true, cycleOn:true, coachTone:"military",
+           /* Equipment she gravitates to. It biases what a swap offers first;
+              it never removes anything from the programme. */
+           favourEquipment:["band"] },
   seenIntro: false
 };
 
@@ -1626,6 +1629,83 @@ const EXDB = {
   start:"Feet hip width, toes slightly out.",
   move:"Sit between the hips to depth, then stand tall and squeeze the glutes.",
   easier:"Box Squat",harder:"Goblet Squat"},
+/* ---------- BANDS ----------
+   Lia likes band work, so the library carries a proper band version of the
+   main patterns rather than one or two token movements. Load is logged as a
+   band tension, not a weight. */
+"Banded Glute Bridge":{m:["glutes"],eq:"band",pat:"thrust",load:"band",tags:["floor","pelvic-safe"],
+  cue:"Push the knees out against the band as you lift.",neck:"Head heavy on the mat — no pushing through the neck.",
+  miss:"Letting the knees collapse in at the top.",
+  start:"On your back, knees bent, band above the knees, heels close to the glutes.",
+  move:"Press the knees out into the band, then lift the hips to a straight line. Squeeze two seconds and lower slowly.",
+  easier:"Glute Bridge",harder:"Banded Hip Thrust"},
+"Banded Hip Thrust":{m:["glutes"],eq:"band",pat:"thrust",load:"band",
+  cue:"Knees pressing out, hips driving up.",neck:"Chin tucked, eyes on your knees.",
+  miss:"Arching the back instead of finishing with the glutes.",
+  start:"Upper back on the bench, band above the knees, feet flat and hip width.",
+  move:"Press out against the band and drive the hips to lockout. Pause, lower under control.",
+  easier:"Banded Glute Bridge",harder:"Hip Thrust"},
+"Banded Squat":{m:["quads","glutes"],eq:"band",pat:"squat",load:"band",
+  cue:"Knees track out against the band the whole way.",
+  miss:"Knees caving as you stand.",
+  start:"Band above the knees, feet a little wider than hips.",
+  move:"Sit between the hips keeping outward pressure on the band, then drive up through the whole foot.",
+  easier:"Bodyweight Squat",harder:"Goblet Squat"},
+"Banded Romanian Deadlift":{m:["hamstrings","glutes"],eq:"band",pat:"hinge",load:"band",
+  cue:"Hips back, band tight down the legs.",neck:"Eyes at the floor ahead, neck following the spine.",
+  miss:"Bending the knees instead of hinging.",
+  start:"Standing on the middle of the band, ends held at the thighs, soft knees.",
+  move:"Push the hips back letting the band slide down the legs, then stand by squeezing the glutes.",
+  easier:"Hip Hinge Drill",harder:"DB Romanian Deadlift"},
+"Banded Good Morning":{m:["hamstrings","glutes"],eq:"band",pat:"hinge",load:"band",
+  cue:"Band across the upper back, long hinge, flat back.",neck:"The band sits on the shelf of the upper back, never the neck.",
+  miss:"Rounding at the bottom.",
+  start:"Standing on the band, the other end looped behind the neck and across the upper back.",
+  move:"Hinge forward with a flat back until the hamstrings load, then drive the hips back under you.",
+  easier:"Banded Romanian Deadlift",harder:"Good Morning"},
+"Banded Kickback":{m:["glutes"],eq:"band",pat:"thrust",load:"band",tags:["unilateral"],
+  cue:"Only the leg moves, the ribs stay down.",neck:"Eyes to the mat, back of the neck long.",
+  miss:"Arching the lower back to get more range.",
+  start:"On all fours, band looped around one foot and held under the hands.",
+  move:"Press the foot back and slightly up against the band, squeeze, return slowly.",
+  easier:"Quadruped Hip Extension",harder:"Cable Kickback"},
+"Banded Fire Hydrant":{m:["glutes"],eq:"band",pat:"abduction",load:"band",tags:["floor","unilateral"],
+  cue:"Open the knee out, hips square to the floor.",
+  miss:"Rolling the hips open to lift higher.",
+  start:"All fours, band above the knees.",
+  move:"Lift one knee out to the side against the band, keeping the hips level. Pause, lower slowly.",
+  easier:"Clamshell",harder:"Cable Standing Abduction"},
+"Banded Reverse Lunge":{m:["glutes","quads"],eq:"band",pat:"lunge",load:"band",tags:["unilateral"],
+  cue:"Front foot on the band, drive up through that heel.",
+  miss:"Letting the band pull the torso forward.",
+  start:"Standing on the band with the front foot, ends held at the shoulders.",
+  move:"Step back into a lunge, drop the back knee, then pull yourself up with the front glute.",
+  easier:"Reverse Lunge",harder:"Bulgarian Split Squat"},
+"Banded Row":{m:["back","lats","arms"],eq:"band",pat:"pull-h",load:"band",
+  cue:"Drive the elbows past the ribs, chest tall.",neck:"Shoulders down and away from the ears the whole set.",
+  miss:"Leaning back to move the band.",
+  start:"Band anchored at chest height or around the feet if seated, arms long.",
+  move:"Pull the handles to the belly by driving the elbows back, squeeze, return under control.",
+  easier:"Band Pull-Apart",harder:"Seated Cable Row"},
+"Banded Face Pull":{m:["upper-back","shoulders"],eq:"band",pat:"pull-h",load:"band",
+  cue:"Pull to the eyebrows, thumbs back.",neck:"Shoulders stay down while you pull — this is the posture fix, not another cause of tightness.",
+  miss:"Shrugging up to the ears.",
+  start:"Band anchored at eye height, one end in each hand, arms long.",
+  move:"Pull the band apart toward the face with the elbows high and wide, then return slowly.",
+  easier:"Band Pull-Apart",harder:"Face Pull"},
+"Banded Chest Press":{m:["chest","shoulders","arms"],eq:"band",pat:"push-h",load:"band",
+  cue:"Split stance, press and squeeze at the middle.",neck:"Shoulders down as you press.",
+  miss:"Letting the shoulders roll forward at the end of the press.",
+  start:"Band anchored behind you at chest height, an end in each hand, split stance.",
+  move:"Press both hands forward until they nearly meet, squeeze, return slowly.",
+  easier:"Incline Push-up",harder:"DB Chest Press"},
+"Banded Woodchop":{m:["obliques","deep-core"],eq:"band",pat:"core-anti-rot",load:"band",
+  cue:"Rotate from the ribs, not the lower back.",neck:"Let the head follow the hands smoothly.",
+  miss:"Yanking with straight arms and the lower back.",
+  start:"Band anchored high, both hands on the end, side on.",
+  move:"Pull down and across to the opposite hip, pivoting the back foot, then return slowly.",
+  easier:"Banded Pallof Press",harder:"Cable Woodchop"},
+
 /* ---------- progressions and regressions referenced above ---------- */
 "Glute Bridge Hold":{m:["glutes"],eq:"bw",pat:"thrust",load:"time",timed:true,tags:["floor","pelvic-safe"],
   cue:"Hold at the top, ribs down, breathe.",neck:"Head heavy on the mat.",
@@ -1774,12 +1854,32 @@ function bodyMap(muscles){
   const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 112">'+head+body+'</svg>';
   return svg.split('"').join(q);
 }
+/* ---------- demonstration media ----------
+   Photographs and clips live in the repo beside index.html, in a folder
+   called demos. The file is named after the exercise, lower case with
+   hyphens: "Hip Thrust" -> demos/hip-thrust.jpg.
+   Only the names listed in DEMO_FILES are requested, so a phone never fires
+   a hundred failed requests looking for files that aren't there. Adding a
+   demonstration is two steps: drop the file in demos/, add the line here. */
+function slugOf(name){ return String(name).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
+const DEMO_FILES = {
+  /* "Hip Thrust":"jpg", */
+};
+function demoFile(name){
+  const ext=DEMO_FILES[name];
+  return ext? ("demos/"+slugOf(name)+"."+ext) : null;
+}
+function isVideo(url){ return /\.(mp4|webm|mov)(\?|$)/i.test(String(url||"")); }
 function mediaFor(name){
-  const o=(DB.media||{})[name]; if(o) return o;
-  const e=EX(name); return (e&&e.gif)||null;
+  const o=(DB.media||{})[name]; if(o) return o;   /* one she pasted in herself */
+  const f=demoFile(name); if(f) return f;          /* one in the repo */
+  const e=EX(name); return (e&&e.gif)||null;       /* the built-in animation */
 }
 function mediaHTML(name,cls){
   const url=mediaFor(name), e=EX(name)||{};
+  if(url && isVideo(url))
+    return '<div class="media '+(cls||"")+'"><video src="'+esc(url)+'" autoplay muted loop playsinline '+
+      'data-ex="'+esc(name)+'" onerror="mediaFailed(this)" aria-label="'+esc(name)+' demonstration"></video></div>';
   if(url) return '<div class="media '+(cls||"")+'"><img src="'+esc(url)+'" alt="'+esc(name)+' demonstration"'+
     ((cls||"").indexOf("sm")>=0?' loading="lazy"':'')+' data-ex="'+esc(name)+'" data-t="'+Date.now()+'" onerror="mediaFailed(this)" /></div>';
   const lab=(e.m||[]).slice(0,2).map(muscleLabel).join(" · ");
@@ -2295,6 +2395,7 @@ function replacementsFor(w,itemId,n){
     if((c.m||[])[0]===target) s+=5; else if((c.m||[]).includes(target)) s+=3;
     if(c.pat===pat) s+=3;
     if(c.eq===e.eq) s+=2;                      /* stay at the same station */
+    if((DB.prefs.favourEquipment||[]).includes(c.eq)) s+=2;   /* bands, in her case */
     if(prefs[nm]&&prefs[nm].love) s+=3;
     if(mediaFor(nm)) s+=1;
     if((c.tags||[]).includes("pelvic-safe")) s+=1;
