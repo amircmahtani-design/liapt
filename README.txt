@@ -183,11 +183,21 @@ AFTER THE SESSION
   dislike comes round less often. Skip something three times and it asks one
   short question instead of prescribing it again.
 
-SWAP
-  Now leads with the three you actually want — Easier, Same level,
+SWAP, AND "I DON'T LIKE THIS ONE"
+  Tap any movement anywhere — a working set, a warm-up move, a cool-down
+  stretch — and the sheet that opens has Swap it and Don't like it sitting
+  right under the picture.
+
+  Swap leads with the three you actually want — Easier, Same level,
   Different kit — each with a one-line reason. It never offers something on
   hold, on the avoid list, or done in the last two days. What you choose is
-  remembered.
+  remembered: it scores higher next time, and the one you swapped out scores
+  lower.
+
+  Don't like it asks once, says what it will put in its place, and then that
+  movement is never built into a session again — not in the working sets,
+  not in the warm-up, not in the cool-down. Put it back any time in
+  Settings -> Programme -> Movements you like and avoid.
 
 THE COACH
   Warm, confident and concise by default. The direct voice is still there in

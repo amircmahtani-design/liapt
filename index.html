@@ -2967,9 +2967,14 @@ function rotateList(list,seed,n){
 }
 function buildCooldownV(focus,dateISO,nonce){
   const names=[];
-  (focus||[]).forEach(f=>{ (COOLDOWN_BY_FOCUS[f]||[]).forEach(n=>{ if(!names.includes(n)) names.push(n); }); });
+  (focus||[]).forEach(f=>{ (COOLDOWN_BY_FOCUS[f]||[]).forEach(n=>{
+    if(!names.includes(n) && movementAllowed(n)) names.push(n); }); });
   ["Child's Pose","90/90 Breathing","Glute Stretch","Thread the Needle","Sphinx Pose","Open Book"]
-    .forEach(n=>{ if(!names.includes(n) && EX(n)) names.push(n); });
+    .forEach(n=>{ if(!names.includes(n) && movementAllowed(n)) names.push(n); });
+  if(names.length<3){
+    EX_NAMES.filter(n=>catOf(n)==="mobility" && movementAllowed(n) && !names.includes(n))
+      .slice(0,3-names.length).forEach(n=>names.push(n));
+  }
   const picked=rotateList(names,(dateISO||"")+"/cool/"+(nonce||0),4);
   const secs=(DB.prefs.cooldownSec||40);
   return picked.map(n=>{ const e=EX(n)||{};
@@ -3521,11 +3526,26 @@ function restFor(w,b,kind,item){
   if(kind==="block") return Math.max(0,d.block);
   return 0;
 }
+/* A movement she has told us she does not like, or that hurt, never appears
+   again — in the working sets, the warm-up or the cool-down. */
+function movementAllowed(ex){
+  if(!EX(ex)) return false;
+  if((DB.exPrefs||{})[ex] && DB.exPrefs[ex].avoid) return false;
+  if((coach().blocked||{})[ex]) return false;
+  return true;
+}
 function buildPrep(focus,neck){
-  const out=PREP_BASE.map(newItem);
-  (focus||[]).forEach(f=>{ (PREP_BY_FOCUS[f]||[]).forEach(p=>{
+  const ok=p=>movementAllowed(p.ex);
+  const out=PREP_BASE.filter(ok).map(newItem);
+  (focus||[]).forEach(f=>{ (PREP_BY_FOCUS[f]||[]).filter(ok).forEach(p=>{
     if(!out.some(o=>o.ex===p.ex)) out.push(newItem(p)); }); });
-  if(neck>=4) PREP_NECK_EXTRA.forEach(p=>{ if(!out.some(o=>o.ex===p.ex)) out.splice(2,0,newItem(p)); });
+  if(neck>=4) PREP_NECK_EXTRA.filter(ok).forEach(p=>{ if(!out.some(o=>o.ex===p.ex)) out.splice(2,0,newItem(p)); });
+  /* if her avoid list has thinned it out, top it up from the mobility pool */
+  if(out.length<4){
+    EX_NAMES.filter(n=>catOf(n)==="mobility" && movementAllowed(n) && !out.some(o=>o.ex===n))
+      .slice(0,4-out.length)
+      .forEach(n=>out.push(newItem({ex:n,time:40})));
+  }
   /* Eight is already a long warm-up to read on a phone. */
   return out.slice(0,8);
 }
@@ -3766,6 +3786,29 @@ function findItem(w,id){
   for(const b of w.blocks){ const it=b.items.find(x=>x.id===id); if(it) return {item:it,block:b}; }
   return null;
 }
+/* A warm-up move and a working set are both movements she might not fancy,
+   so everything that can be swapped is found the same way. */
+function findAnyItem(w,id){
+  const inBlock=findItem(w,id);
+  if(inBlock) return {...inBlock, where:"block"};
+  let it=(w.prep||[]).find(x=>x.id===id);
+  if(it) return {item:it, block:null, list:w.prep, where:"prep"};
+  it=(w.cooldown||[]).find(x=>x.id===id);
+  if(it) return {item:it, block:null, list:w.cooldown, where:"cool"};
+  return null;
+}
+function swapAnyItem(w,id,newEx,why){
+  const f=findAnyItem(w,id); if(!f||!EX(newEx)||UNAVAILABLE.test(newEx)) return null;
+  if(f.where==="block") return swapItem(w,id,newEx,why);
+  const old=f.item, i=f.list.indexOf(old);
+  const it=newItem({ex:newEx,reps:old.reps,time:old.time,side:old.side});
+  it.id=old.id; it.swappedFrom=old.ex; if(why) it.why=why;
+  f.list[i]=it; w.edited=true;
+  if(why!=="neck"&&why!=="pelvic"){ exStat(newEx).chosen=(exStat(newEx).chosen||0)+1;
+    exStat(old.ex).swappedOut=(exStat(old.ex).swappedOut||0)+1; }
+  w.mins=estimateMinutes(w);
+  return it;
+}
 
 /* ---------- the adjustment engine ----------
    Deterministic. Runs whether or not an API key is present. The model is
@@ -3856,13 +3899,15 @@ function applyCheckin(w,ci){
 
 /* ---------- replacement suggestions ---------- */
 function replacementsFor(w,itemId,n){
-  const found=findItem(w,itemId); if(!found) return [];
+  const found=findAnyItem(w,itemId); if(!found) return [];
   const it=found.item, e=EX(it.ex)||{};
   const target=(e.m||[])[0];
   const pat=e.pat;
   const neck=neckToday();
   const inSession=new Set();
   w.blocks.forEach(b=>b.items.forEach(x=>inSession.add(x.ex)));
+  (w.prep||[]).forEach(x=>inSession.add(x.ex));
+  (w.cooldown||[]).forEach(x=>inSession.add(x.ex));
   const prefs=DB.exPrefs||{};
   const scored=allNames().filter(nm=>{
     if(nm===it.ex||inSession.has(nm)) return false;
@@ -6190,7 +6235,7 @@ function finishedHTML(w){
 
 /* ---------- swap ---------- */
 function swapSections(w,id){
-  const f=findItem(w,id); if(!f) return [];
+  const f=findAnyItem(w,id); if(!f) return [];
   const it=f.item, e=EX(it.ex)||{};
   const all=replacementsFor(w,id,40);
   const byName=n=>all.find(o=>o.name===n);
@@ -6223,13 +6268,14 @@ function swapSections(w,id){
   return out;
 }
 function openReplace(id){
-  const w=W(), f=findItem(w,id); if(!f) return;
+  const w=W(), f=findAnyItem(w,id); if(!f) return;
   const secs=swapSections(w,id);
   const body=secs.map(s=>'<div class="eyebrow" style="margin:16px 0 8px">'+s.title+'</div>'+
       s.items.map(o=>pickRow(o.name,o.why,"doReplace('"+id+"','"+esc(o.name).replace(/'/g,"\\'")+"')")).join("")).join("")+
     '<button class="btn sec" style="margin-top:14px" onclick="openBrowse(\''+id+'\')">'+ICO.search+
       '<span class="lbl">Search every exercise</span></button>'+
-    '<button class="btn ghost sm" style="margin-top:10px" onclick="markAvoid(\''+id+'\')"><span class="lbl">Don\'t show me this again</span></button>';
+    '<button class="btn ghost sm" style="margin-top:10px" onclick="closeSheet();confirmAvoid(\''+id+'\')">'+
+      '<span class="lbl">I don\'t like this one — never again</span></button>';
   openSheet("Instead of "+f.item.ex, body);
 }
 function pickRow(name,why,onclick){
@@ -6240,18 +6286,33 @@ function pickRow(name,why,onclick){
 }
 function doReplace(id,name){
   const w=W();
-  const ok=swapItem(w,id,name,"manual");
+  const ok=swapAnyItem(w,id,name,"manual");
   if(!ok){ toast("That one isn't in the library"); return; }
   save(); closeSheet(); renderTrain();
-  toast(name+". Get on with it.");
+  toast("Swapped to "+name+".");
+}
+/* "I don't like this one" is permanent, so it asks once and says what it
+   will put in its place. */
+function confirmAvoid(id){
+  const w=W(), f=findAnyItem(w,id); if(!f) return;
+  const alt=replacementsFor(w,id,1)[0];
+  openSheet("Don't like "+f.item.ex+"?",
+    '<p class="muted">It comes out of today and never gets built into a session again.'+
+    (alt? ' <b>'+esc(alt.name)+'</b> takes its place.' : '')+'</p>'+
+    '<button class="btn danger" style="margin-top:20px" onclick="markAvoid(\''+id+'\')">'+
+      '<span class="lbl">Yes, take it out</span></button>'+
+    '<button class="btn ghost" style="margin-top:10px" onclick="closeSheet();openReplace(\''+id+'\')">'+
+      '<span class="lbl">Just swap it for today</span></button>'+
+    '<p class="tiny dim" style="margin:14px 2px 0">You can put it back in Settings \u2192 Programme \u2192 Movements you like and avoid.</p>');
 }
 function markAvoid(id){
-  const w=W(), f=findItem(w,id); if(!f) return;
-  DB.exPrefs[f.item.ex]={...(DB.exPrefs[f.item.ex]||{}),avoid:true};
+  const w=W(), f=findAnyItem(w,id); if(!f) return;
+  const gone=f.item.ex;
+  DB.exPrefs[gone]={...(DB.exPrefs[gone]||{}),avoid:true};
   const opts=replacementsFor(w,id,1);
-  if(opts.length) swapItem(w,id,opts[0].name,"avoided");
+  if(opts.length) swapAnyItem(w,id,opts[0].name,"avoided");
   save(); closeSheet(); renderTrain();
-  toast("Removed from your programme");
+  toast(gone+" is out of your programme");
 }
 
 /* ---------- browse ---------- */
@@ -6335,6 +6396,15 @@ function howTo(id){
   const e=EX(name)||{};
   openSheet(name,
     mediaHTML(name)+
+    /* wherever she is looking at a movement, she can change it — and the
+       way out sits above the reading, not under it */
+    ((W()&&findAnyItem(W(),id))
+      ? '<div class="btn-row" style="margin-top:14px">'+
+          '<button class="btn sec sm" onclick="closeSheet();openReplace(\''+id+'\')">'+ICO.swap+
+            '<span class="lbl">Swap it</span></button>'+
+          '<button class="btn ghost sm" onclick="confirmAvoid(\''+id+'\')">'+
+            '<span class="lbl">Don\'t like it</span></button>'+
+        '</div>' : '')+
     '<dl class="deflist">'+
       (e.start?'<dt>Set up</dt><dd>'+esc(e.start)+'</dd>':'')+
       (e.move?'<dt>The movement</dt><dd>'+esc(e.move)+'</dd>':'')+
@@ -6344,6 +6414,7 @@ function howTo(id){
       '<dt>Trains</dt><dd>'+(e.m||[]).map(muscleLabel).join(" · ")+' · '+(EQUIP_LABEL[e.eq]||e.eq)+'</dd>'+
     '</dl>'+
     scaleRowHTML(id,e)+
+    /* wherever she is looking at a movement, she can change it */
     (mediaFor(name)?'':'<button class="btn ghost sm" style="margin-top:10px" onclick="addMedia(\''+esc(name).replace(/'/g,"\\'")+'\')"><span class="lbl">Add a demonstration</span></button>'));
 }
 function scaleRowHTML(id,e){
