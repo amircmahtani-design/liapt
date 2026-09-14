@@ -223,9 +223,24 @@ THE PHONE AND THE IPAD
 THE WARM-UP AND THE COOL-DOWN
   Both now show the move she is on, full width, with its cue — not just a
   thumbnail. Tick it and the picture moves to the next one. Tapping any name
-  in the list below opens the full instructions. Nothing about the order or
-  the checklist changed; it just stopped assuming she already knows the
-  movement.
+  in the list below opens the full instructions, and gives her Swap it and
+  Don't like it.
+
+  And both now MATCH THE SESSION. They used to be built from the day's label
+  — "Glutes & Hamstrings" — which stopped being the whole truth once the
+  movements started rotating. They are now built from the movements actually
+  chosen:
+
+    The warm-up keeps the neck and rib work, which is the point of this app,
+    and then rehearses every movement pattern the session contains, one move
+    per pattern before any pattern gets a second. A squat day opens the hips
+    and does a bodyweight squat; a pulling day does scapular pulls and band
+    pull-aparts; a conditioning day raises the heart rate.
+
+    The cool-down stretches the muscles she actually worked, hardest-worked
+    first, and never repeats a movement from the session itself. The top
+    three muscles each get their own stretch; the fourth slot rotates, so it
+    still varies week to week.
 
 WHAT YOU DID, AND WHEN
   Progress leads with two things:

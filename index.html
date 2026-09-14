@@ -2965,17 +2965,31 @@ function rotateList(list,seed,n){
   for(let i=0;i<list.length && out.length<n;i++) out.push(list[(start+i)%list.length]);
   return out;
 }
-function buildCooldownV(focus,dateISO,nonce){
+function buildCooldownV(focus,dateISO,nonce,blocks){
+  const worked=new Set();
+  (blocks||[]).forEach(b=>(b.items||[]).forEach(it=>worked.add(it.ex)));
+  const usable=n=>!worked.has(n) && movementAllowed(n) && !!EX(n);
+  /* stretch what she actually worked, hardest-worked muscle first: each of
+     the top three gets its own stretch before anything else is considered */
+  const muscles=topMuscles(blocks,4);
+  const head=[];
+  muscles.slice(0,3).forEach(m=>{
+    const pick=(COOLDOWN_BY_MUSCLE[m]||[]).find(n=>!head.includes(n) && usable(n));
+    if(pick) head.push(pick);
+  });
   const names=[];
-  (focus||[]).forEach(f=>{ (COOLDOWN_BY_FOCUS[f]||[]).forEach(n=>{
-    if(!names.includes(n) && movementAllowed(n)) names.push(n); }); });
-  ["Child's Pose","90/90 Breathing","Glute Stretch","Thread the Needle","Sphinx Pose","Open Book"]
-    .forEach(n=>{ if(!names.includes(n) && movementAllowed(n)) names.push(n); });
-  if(names.length<3){
-    EX_NAMES.filter(n=>catOf(n)==="mobility" && movementAllowed(n) && !names.includes(n))
-      .slice(0,3-names.length).forEach(n=>names.push(n));
+  const add=n=>{ if(!names.includes(n) && !head.includes(n) && usable(n)) names.push(n); };
+  muscles.forEach(m=>(COOLDOWN_BY_MUSCLE[m]||[]).forEach(add));
+  if(!muscles.length) (focus||[]).forEach(f=>(COOLDOWN_BY_FOCUS[f]||[]).forEach(add));
+  ["Child's Pose","90/90 Breathing","Thread the Needle","Sphinx Pose","Open Book"].forEach(add);
+  if(head.length+names.length<3){
+    EX_NAMES.filter(n=>catOf(n)==="mobility" && usable(n) && !names.includes(n) && !head.includes(n))
+      .slice(0,3-head.length-names.length).forEach(n=>names.push(n));
   }
-  const picked=rotateList(names,(dateISO||"")+"/cool/"+(nonce||0),4);
+  /* the stretch for each worked muscle is held; the tail rotates so the
+     cool-down still varies week to week */
+  const tail=rotateList(names,(dateISO||"")+"/cool/"+(nonce||0),Math.max(0,4-head.length));
+  const picked=[...head,...tail].slice(0,4);
   const secs=(DB.prefs.cooldownSec||40);
   return picked.map(n=>{ const e=EX(n)||{};
     return newItem({ex:n,time:secs,side:(e.tags||[]).includes("unilateral")||/Stretch|Open Book|Thread/.test(n)}); });
@@ -3526,6 +3540,77 @@ function restFor(w,b,kind,item){
   if(kind==="block") return Math.max(0,d.block);
   return 0;
 }
+/* ---------- preparing for, and unwinding from, THIS session ----------
+   The warm-up used to prepare for the day's label and the cool-down used to
+   stretch it. Now that the movements rotate, the label is not the session:
+   both are built from the movements actually chosen. */
+const PREP_BY_PATTERN = {
+  squat:[{ex:"90/90 Hip Switch",time:45},{ex:"Bodyweight Squat",reps:10}],
+  hinge:[{ex:"Hamstring Sweep",time:30,side:true},{ex:"Glute Bridge",reps:12}],
+  lunge:[{ex:"Half-kneeling Hip Flexor Stretch",time:30,side:true},{ex:"World's Greatest Stretch",time:40,side:true}],
+  thrust:[{ex:"Glute Bridge",reps:12},{ex:"Clamshell",reps:12,side:true}],
+  abduction:[{ex:"Clamshell",reps:12,side:true}],
+  "push-h":[{ex:"Scapular Push-up",reps:10}],
+  "push-v":[{ex:"Wall Slide",reps:8},{ex:"Band Pass-through",time:40}],
+  "pull-h":[{ex:"Band Pull-Apart",reps:12},{ex:"Scapular Pull",reps:8}],
+  "pull-v":[{ex:"Scapular Pull",reps:8},{ex:"Band Pull-Apart",reps:12}],
+  carry:[{ex:"Dead Bug",reps:6,side:true}],
+  calf:[{ex:"Downward Dog",time:40}],
+  curl:[{ex:"Band Pass-through",time:30}],
+  extension:[{ex:"Band Pass-through",time:30}],
+  cardio:[{ex:"March in Place",time:45},{ex:"90/90 Hip Switch",time:40}],
+  "core-anti-ext":[{ex:"Dead Bug",reps:6,side:true}],
+  "core-anti-rot":[{ex:"Dead Bug",reps:6,side:true}],
+  "core-anti-lat":[{ex:"Connection Breath",time:45}],
+  "core-flex":[{ex:"Connection Breath",time:45}],
+  "core-ext":[{ex:"Cat-Cow",time:40}],
+  breath:[{ex:"Connection Breath",time:45}]
+};
+/* Stretch what she actually worked, hardest-worked first. */
+const COOLDOWN_BY_MUSCLE = {
+  glutes:["Glute Stretch","Pigeon Pose","Figure Four (seated)"],
+  hamstrings:["Hamstring Sweep","Seated Hamstring Stretch","Downward Dog"],
+  quads:["Half-kneeling Hip Flexor Stretch","World's Greatest Stretch"],
+  calves:["Downward Dog"],
+  back:["Child's Pose","Sphinx Pose","Cat-Cow"],
+  lats:["Puppy Pose","Child's Pose","Thread the Needle"],
+  "upper-back":["Thread the Needle","Open Book","Thoracic Extension"],
+  shoulders:["Band Pass-through","Wall Angel","Puppy Pose"],
+  chest:["Open Book","Band Pass-through","Thread the Needle"],
+  arms:["Band Pass-through","Child's Pose"],
+  "deep-core":["Sphinx Pose","90/90 Breathing","Child's Pose"],
+  obliques:["Thread the Needle","Sphinx Pose"],
+  neck:["Upper Trap Stretch","Levator Scapulae Stretch","Neck Rotation"],
+  cardio:["Downward Dog","90/90 Breathing"],
+  mobility:["Child's Pose","90/90 Breathing"]
+};
+/* How much of the session each muscle actually took, rounds included. */
+function sessionMuscleScore(blocks){
+  const score={};
+  (blocks||[]).forEach(b=>{
+    const rounds=b.rounds||1;
+    (b.items||[]).forEach(it=>{
+      ((EX(it.ex)||{}).m||[]).forEach((mus,i)=>{
+        score[mus]=(score[mus]||0)+rounds*(i===0?2:1);
+      });
+    });
+  });
+  return score;
+}
+function topMuscles(blocks,n){
+  const sc=sessionMuscleScore(blocks);
+  return Object.keys(sc).filter(m=>m!=="mobility")
+    .sort((a,b)=>sc[b]-sc[a]).slice(0,n||4);
+}
+function sessionPatterns(blocks){
+  const out=[];
+  (blocks||[]).forEach(b=>(b.items||[]).forEach(it=>{
+    const p=(EX(it.ex)||{}).pat;
+    if(p && !out.includes(p)) out.push(p);
+  }));
+  return out;
+}
+
 /* A movement she has told us she does not like, or that hurt, never appears
    again — in the working sets, the warm-up or the cool-down. */
 function movementAllowed(ex){
@@ -3534,11 +3619,21 @@ function movementAllowed(ex){
   if((coach().blocked||{})[ex]) return false;
   return true;
 }
-function buildPrep(focus,neck){
+function buildPrep(focus,neck,blocks){
   const ok=p=>movementAllowed(p.ex);
+  /* the neck and rib work is the point of this app — it is in every session */
   const out=PREP_BASE.filter(ok).map(newItem);
-  (focus||[]).forEach(f=>{ (PREP_BY_FOCUS[f]||[]).filter(ok).forEach(p=>{
-    if(!out.some(o=>o.ex===p.ex)) out.push(newItem(p)); }); });
+  const add=p=>{ if(ok(p) && !out.some(o=>o.ex===p.ex)) out.push(newItem(p)); };
+  /* then rehearse the patterns today actually contains, in the order they
+     come up, rather than the patterns the day is named after */
+  const pats=sessionPatterns(blocks);
+  if(pats.length){
+    /* one move per pattern first, so every pattern in the session is
+       rehearsed before any of them gets a second move */
+    pats.forEach(pt=>{ const l=PREP_BY_PATTERN[pt]||[]; if(l[0]) add(l[0]); });
+    pats.forEach(pt=>(PREP_BY_PATTERN[pt]||[]).slice(1).forEach(add));
+  }
+  else (focus||[]).forEach(f=>(PREP_BY_FOCUS[f]||[]).forEach(add));
   if(neck>=4) PREP_NECK_EXTRA.filter(ok).forEach(p=>{ if(!out.some(o=>o.ex===p.ex)) out.splice(2,0,newItem(p)); });
   /* if her avoid list has thinned it out, top it up from the mobility pool */
   if(out.length<4){
@@ -3591,13 +3686,17 @@ function fitToTime(w, targetMins){
     if((w.prep||[]).length>5){ w.prep.pop(); continue; }
     break;
   }
-  /* room to spare: put rounds back, up to four */
-  guard=0;
-  while(estimateMinutes(w) < targetMins-6 && guard++<40){
-    const growable=w.blocks.filter(b=>!b.flow && b.rounds<4);
-    if(!growable.length) break;
-    growable[0].rounds++;
-  }
+  /* room to spare: put rounds back, up to four, and then to five if the
+     session is still well short of what she asked for — which happens when
+     the kit she has today leaves fewer blocks to fill the hour */
+  [4,5].forEach(ceiling=>{
+    let g=0;
+    while(estimateMinutes(w) < targetMins-6 && g++<40){
+      const growable=w.blocks.filter(b=>!b.flow && b.rounds<ceiling);
+      if(!growable.length) break;
+      growable[0].rounds++;
+    }
+  });
   w.mins=estimateMinutes(w);
   return w;
 }
@@ -3648,9 +3747,9 @@ function buildSession(dateISO,mode){
       date, dayKey:plan.key, title:fav.title, tag:fav.tag, kind:fav.kind, focus:fav.focus,
       mode:fav.mode, duration:durKey, targetMins:fav.targetMins||targetMins,
       blockWeek:ctx.week, replay:true, replayRun:(fav.runs||1)+1,
-      prep:buildPrep(plan.focus,neck),
+      prep:buildPrep(plan.focus,neck,r.blocks),
       blocks:r.blocks,
-      cooldown:buildCooldownV(plan.focus,date,ctx.nonce),
+      cooldown:buildCooldownV(plan.focus,date,ctx.nonce,r.blocks),
       adjustments:[], analysis:null, generatedAt:Date.now(), edited:false,
       state:freshState(), log:{}
     };
@@ -3700,9 +3799,9 @@ function buildSession(dateISO,mode){
     date, dayKey:plan.key, title:plan.title, tag:plan.tag, kind:plan.kind, focus:plan.focus,
     mode: variant, duration:durKey, targetMins,
     blockWeek: ctx.week,
-    prep:buildPrep(plan.focus,neck),
+    prep:buildPrep(plan.focus,neck,blocks),
     blocks,
-    cooldown:buildCooldownV(plan.focus,date,ctx.nonce),
+    cooldown:buildCooldownV(plan.focus,date,ctx.nonce,blocks),
     adjustments:[], analysis:null, generatedAt:Date.now(), edited:false,
     state:freshState(), log:{}
   };
