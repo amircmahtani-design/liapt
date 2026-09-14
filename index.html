@@ -764,7 +764,7 @@ const DEFAULTS = {
     /* Every transition has its own rest. Supersets get a short changeover,
        not a full rest — that is the whole point of pairing them. */
     rest: { superset:20, round:75, block:100, straight:75 },
-    sound:true, vibrate:true, cycleOn:true, coachTone:"military",
+    sound:true, vibrate:true, cycleOn:true, coachTone:"warm",
     cooldownSec:40,
     /* The three buttons on the duration picker, and the one she used last. */
     durations:{ quick:20, standard:40, full:60 },
@@ -3639,37 +3639,94 @@ function monthStats(monthISO){
    ===================================================================== */
 function aiReady(){ return !!(DB.ai && DB.ai.key); }
 
-const COACH_SYSTEM = `You are Lia's personal trainer inside an app called Train.
+/* ---------- the coach's voice ----------
+   Two tones, one set of rules. The rules are not negotiable in either. */
+const COACH_RULES = `
+You never diagnose, never name a condition, and never promise to fix pain. You are not a substitute for a doctor or a physiotherapist. If she reports severe, worsening, persistent or radiating symptoms, numbness, weakness, dizziness, or a new injury, tell her to stop the session and get it assessed properly.
 
-Manner: military. Direct, firm, brief, decisive, accountability-first. No warmth for its own sake, no motivational speeches, no quotations, no praise for showing up, no emojis, no exclamation marks. Short declarative sentences.
-
-You hold her to the work, never to her worth. Dry, cutting humour about missed sessions is right. Comment on behaviour and effort only. Never remark on her body, weight, eating, motherhood, health status, or personal worth. Never use insults such as lazy, weak, pathetic, useless.
-
-You never diagnose and never promise to fix pain. If she reports severe, worsening, persistent or radiating symptoms, numbness, weakness, dizziness, or a new injury, you tell her to stop the session and get it assessed properly.
+Never remark on her body, her weight, her eating, her motherhood, or her worth. Comment on the training and the effort only.
 
 Nutrition is not part of this app. If she raises food, say it is handled elsewhere and move on.
 
-Keep every response under 45 words unless she explicitly asks you to explain something.`;
+The app decides the programme, not you. Never claim to have changed something unless you returned the action for it. Never invent an exercise name.
+
+Be brief. Under 45 words unless she explicitly asks you to explain something. No essays, no motivational speeches, no quotations, no gym jargon, no emojis. She should understand the plan in seconds.`;
+
+const COACH_TONES = {
+  warm: `You are Lia's personal trainer inside an app called Train.
+
+Manner: warm, confident, concise, encouraging — a good trainer standing beside her, not a cheerleader and not a drill sergeant. Say what today is for and why, in plain words. Praise the work, not the showing up. Dry humour is welcome; flattery is not.
+
+Sound like this: "Today we're building glutes and legs without wearing you out." "You found this easy last time, so I've added two reps." "Your legs worked yesterday, so today is upper body and mobility." "I'm changing the accessory work but keeping your main lift, so we can measure it."`,
+
+  military: `You are Lia's personal trainer inside an app called Train.
+
+Manner: direct, firm, brief, decisive, accountability-first. No warmth for its own sake, no praise for showing up, no exclamation marks. Short declarative sentences.
+
+You hold her to the work, never to her worth. Dry, cutting humour about missed sessions is right. Never use insults such as lazy, weak, pathetic or useless.`
+};
+function coachSystem(){
+  const t=(DB.prefs&&DB.prefs.coachTone)||"warm";
+  return (COACH_TONES[t]||COACH_TONES.warm)+"\n"+COACH_RULES;
+}
+/* Kept so older saved sessions and any stray reference still resolve. */
+const COACH_SYSTEM = COACH_TONES.warm+"\n"+COACH_RULES;
 
 function coachContext(){
   const d=today(), ci=checkinOn(d), w=sessionFor(d,false), cyc=cycleInfo(d);
   const wk=weekStats();
-  const recent=Object.keys(DB.sessions||{}).sort().slice(-8).map(k=>{
-    const s=DB.sessions[k];
-    return {date:uk(k),title:s.title,done:!!(s.state&&s.state.finished),mode:s.mode};
-  });
+  const c=coach();
+  /* the last ten workouts, and what she actually did in them */
+  const recent=priorSessions(d,10).map(s=>({
+    date:uk(s.date), title:s.title, done:sessionWasPerformed(s),
+    minutes:s.mins, blockWeek:s.blockWeek||null,
+    movements:exercisesIn(s)
+  }));
+  /* how the last fortnight balanced across the movement categories */
+  const bal={};
+  priorSessions(d,10).forEach(s=>exercisesIn(s).forEach(ex=>{
+    const k=catOf(ex); bal[k]=(bal[k]||0)+1;
+  }));
+  const stats=c.exStats||{};
+  const skipped=Object.keys(stats).filter(n=>(stats[n].skipped||0)>=2)
+    .map(n=>({exercise:n, skipped:stats[n].skipped, done:stats[n].done||0}));
+  const disliked=Object.keys(stats).filter(n=>(stats[n].disliked||0)>0).map(n=>n);
+  const loved=Object.keys(stats).filter(n=>(stats[n].loved||0)>0).map(n=>n);
   const necks=neckTrend(10).filter(x=>x.v!=null).map(x=>x.v);
+
+  /* Today's session with, for each movement, the replacements the engine has
+     already approved. The model picks from these; it does not invent. */
+  const todayPlan = w && !w.rest ? {
+    title:w.title, minutes:w.mins, mode:w.mode, blockWeek:w.blockWeek||1,
+    why:w.why||[],
+    blocks:(w.blocks||[]).map(b=>({
+      label:b.label, rounds:b.rounds,
+      items:b.items.map(i=>({
+        exercise:i.ex,
+        prescription:(i.time? i.time+"s" : i.reps+" reps")+(i.side?" each side":"")+(i.weight?" at "+kgTxt(i.weight):""),
+        heldForProgress: i.role==="anchor",
+        approvedAlternatives: replacementsFor(w,i.id,3).map(o=>o.name)
+      }))
+    })),
+    adjustments:w.adjustments||[], finished:!!(w.state&&w.state.finished)
+  } : null;
+
   return {
     profile:{name:DB.profile.name,age:DB.profile.age,experience:DB.profile.experience,
              goals:DB.profile.goals,avoid:DB.profile.avoid,equipment:DB.profile.equipment,
              cSection:DB.profile.csection},
-    today:{date:uk(d), day:DOW_FULL[dowOf(d)], rest:isRestDay(d),
-           workout: w? {title:w.title,mode:w.mode,minutes:w.mins,
-             blocks:(w.blocks||[]).map(b=>({label:b.label,rounds:b.rounds,
-               items:b.items.map(i=>i.ex+(i.side?" (each side)":"")+" "+(i.time? i.time+"s" : i.reps+" reps"))})),
-             adjustments:w.adjustments||[], finished:!!(w.state&&w.state.finished)} : null},
-    checkin: ci? {sleep:ci.sleep,energy:ci.energy,soreness:ci.soreness,stress:ci.stress,
-                  neck:ci.neck,pain:ci.pain,time:ci.time,note:ci.note,readiness:readiness(ci)} : null,
+    programme:{
+      blockWeek:blockWeek(d), blockNote:BLOCK_NOTE[blockWeek(d)],
+      heldForProgress:Object.keys(c.anchors||{}).map(k=>c.anchors[k].ex),
+      categoryBalanceLast10:bal,
+      onHoldAfterPain:Object.keys(c.blocked||{}),
+      lastFeedback:(c.feedback||[]).slice(-3),
+      repeatedlySkipped:skipped, disliked, loved
+    },
+    today:{date:uk(d), day:DOW_FULL[dowOf(d)], rest:isRestDay(d), workout:todayPlan},
+    checkin: ci? {sleep:ci.sleep,energy:ci.energy,soreness:ci.soreness,soreArea:ci.soreArea,
+                  stress:ci.stress,neck:ci.neck,pain:ci.pain,time:ci.time,focus:ci.focus,
+                  note:ci.note,readiness:readiness(ci)} : null,
     cycle: (DB.prefs.cycleOn && cyc.known)? {phase:PHASE_LABEL[cyc.phase],dayOfCycle:cyc.day,estimate:true} : null,
     week:{planned:wk.planned,completed:wk.done,missed:wk.missed,streak:DB.streak||0},
     neckLast10:necks,
@@ -3722,7 +3779,7 @@ const S_CHAT={type:"object",additionalProperties:false,required:["message","acti
     message:{type:"string"},
     action:{type:"object",additionalProperties:false,required:["kind","exercise","replacement","value"],
       properties:{
-        kind:{type:"string",enum:["none","set_duration","rest_today","rebuild","replace","add","remove","set_rounds","ban"]},
+        kind:{type:"string",enum:["none","set_duration","rest_today","rebuild","replace","add","remove","set_rounds","ban","hold","rotate"]},
         exercise:{type:"string",description:"Exact catalogue name, a block letter for set_rounds, or an empty string."},
         replacement:{type:"string",description:"Exact catalogue name, or an empty string."},
         value:{type:"number",description:"Minutes for set_duration, rounds for set_rounds, otherwise 0."}
@@ -3747,7 +3804,7 @@ function fallbackAnalysis(ci,w,changes){
   return {headline:head, summary:FALLBACK_OPENERS[seed]+" "+bits.join(" ")};
 }
 async function analyseDay(ci,w,changes){
-  const ai=await aiJSON(COACH_SYSTEM,
+  const ai=await aiJSON(coachSystem(),
     {task:"Summarise this morning check-in and the changes already made to today's workout. Do not propose further changes. State what changed and why in one or two sentences.",
      checkin:{sleep:ci.sleep,energy:ci.energy,soreness:ci.soreness,stress:ci.stress,neck:ci.neck,pain:ci.pain,
               cycle:ci.cycleStatus,pelvic:ci.pelvic,note:ci.note,time:ci.time,readiness:readiness(ci)},
@@ -3760,34 +3817,82 @@ async function analyseDay(ci,w,changes){
 
 /* ---------- short coach lines ---------- */
 const LINE_POOLS={
-  missed:["You had one job yesterday. The session is still unfinished.",
-          "Yesterday went unlogged. Today is not optional.",
-          "One missed session is data. Two is a pattern. Don't start one.",
-          "The week is short five days. You've already spent one."],
-  nocheckin:["Check-in incomplete. Do it now.",
-             "No check-in. I can't program blind.",
-             "Check in first. Then we train.",
-             "The day starts with the check-in. Start it."],
-  ready:["Session is set. Start Superset A.",
-         "Warm-up, then A1. Go.",
-         "Everything is prepared. Move.",
-         "The work is on the screen. Begin."],
-  done:["Session complete. Logged.",
-        "Done. That's the week moving.",
-        "Finished. Recover properly.",
-        "Work's in the book."],
-  rest:["Rest day. Take it — it's part of the programme.",
-        "No session today. Walk, sleep, eat.",
-        "Scheduled rest. Do not invent a workout.",
-        "Off day. Recovery is the training."]
+  warm:{
+    missed:["Yesterday didn't happen. Today can.",
+            "One missed session is nothing. Two starts a habit — let's not.",
+            "Yesterday went unlogged. Pick it up today.",
+            "The week's still got room. Start here."],
+    nocheckin:["Check in first and I'll set today up properly.",
+               "Three taps and I'll know what to build you.",
+               "Tell me how you slept and how the neck is, then we train.",
+               "Quick check first — it decides the loading."],
+    ready:["Today's ready. Warm-up, then block A.",
+           "It's set. Start with the warm-up and I'll keep time.",
+           "Everything's on the screen. Whenever you are.",
+           "Session's built. Go when you're ready."],
+    done:["Logged. Good work.",
+          "That's done — the week's moving.",
+          "Finished. Eat, sleep, and we go again.",
+          "In the book. Well held."],
+    rest:["Rest day. Take it — it's part of the plan.",
+          "Nothing today. Walk, sleep, eat.",
+          "Scheduled rest. Don't invent a session.",
+          "Off day. The recovery is the training."]
+  },
+  military:{
+    missed:["You had one job yesterday. The session is still unfinished.",
+            "Yesterday went unlogged. Today is not optional.",
+            "One missed session is data. Two is a pattern. Don't start one.",
+            "The week is short five days. You've already spent one."],
+    nocheckin:["Check-in incomplete. Do it now.",
+               "No check-in. I can't program blind.",
+               "Check in first. Then we train.",
+               "The day starts with the check-in. Start it."],
+    ready:["Session is set. Start block A.",
+           "Warm-up, then A1. Go.",
+           "Everything is prepared. Move.",
+           "The work is on the screen. Begin."],
+    done:["Session complete. Logged.",
+          "Done. That's the week moving.",
+          "Finished. Recover properly.",
+          "Work's in the book."],
+    rest:["Rest day. Take it — it's part of the programme.",
+          "No session today. Walk, sleep, eat.",
+          "Scheduled rest. Do not invent a workout.",
+          "Off day. Recovery is the training."]
+  }
 };
 function pickLine(kind,seed){
-  const p=LINE_POOLS[kind]||LINE_POOLS.ready;
+  const pool=LINE_POOLS[(DB.prefs&&DB.prefs.coachTone)==="military"?"military":"warm"];
+  const p=pool[kind]||pool.ready;
   const s=(seed==null? (new Date().getDate()+new Date().getHours()) : seed);
   return p[Math.abs(s)%p.length];
 }
 
 /* ---------- chat ---------- */
+/* ---------- what the coach is allowed to change ----------
+   The model proposes; this decides. Every structural change is put through
+   the same validation the engine uses on its own sessions, and anything that
+   fails is refused with the reason, not quietly applied. */
+function liveContext(){ return buildContext(today(), checkinOn(today())); }
+function issuesForExercise(w,ctx,ex){
+  return validateSession(w,ctx).filter(i=>{
+    if(!i.itemId) return false;
+    const it=(w.blocks||[]).flatMap(b=>b.items).find(x=>x.id===i.itemId);
+    return it && it.ex===ex;
+  });
+}
+function whyRefused(ctx,ex){
+  const e=EX(ex);
+  if(!e) return ex+" isn't in the catalogue";
+  if(ctx.blocked[ex]) return ex+" is on hold after a pain report";
+  if((ctx.prefs[ex]||{}).avoid) return ex+" is on your avoid list";
+  if(!ctx.equip.has(e.eq||"bw")) return "you haven't got the "+(EQUIP_LABEL[e.eq]||e.eq)+" today";
+  if(ctx.neck>=5 && ((e.tags||[]).includes("overhead")||(e.tags||[]).includes("neck-sensitive")))
+    return ex+" loads the neck, and the neck is loud today";
+  if(ctx.recent2.has(ex)) return "you did "+ex+" in one of the last two sessions";
+  return ex+" doesn't fit today's session";
+}
 function runCoachAction(a){
   if(!a||a.kind==="none") return null;
   const d=today();
@@ -3799,7 +3904,12 @@ function runCoachAction(a){
     if(live) return null;
     DB.sessions[d]=restSession(d); save(); return "Today is a rest day.";
   }
-  if(a.kind==="rebuild"){ regenerate(d,w.duration||"full"); return "Session rebuilt."; }
+  if(a.kind==="rebuild"){
+    coach().nonce=(coach().nonce||0)+1;
+    regenerate(d,w.duration||"full");
+    const nw=DB.sessions[d];
+    return "Rebuilt — "+nw.title+", about "+nw.mins+" minutes.";
+  }
   if(a.kind==="set_duration"){
     const mins=clamp(Math.round(a.value||0),10,120);
     if(!mins) return null;
@@ -3813,6 +3923,14 @@ function runCoachAction(a){
     if(hit){ const alt=replacementsFor(w,hit.id,1); if(alt.length) swapItem(w,hit.id,alt[0].name,"banned"); }
     save(); return ex+" is out of the programme.";
   }
+  if(a.kind==="hold"){
+    const ex=name(a.exercise); if(!ex) return null;
+    blockExercise(ex,"you told the coach it hurt");
+    const hit=(w.blocks||[]).flatMap(b=>b.items).find(i=>i.ex===ex);
+    if(hit){ const alt=replacementsFor(w,hit.id,1); if(alt.length) swapItem(w,hit.id,alt[0].name,"pain"); }
+    save();
+    return ex+" is on hold until you put it back. If it keeps hurting, get it looked at properly.";
+  }
   if(a.kind==="remove"){
     const ex=name(a.exercise); if(!ex) return null;
     for(const b of (w.blocks||[])){
@@ -3823,9 +3941,16 @@ function runCoachAction(a){
   }
   if(a.kind==="add"){
     const ex=name(a.replacement)||name(a.exercise); if(!ex) return null;
+    const ctx=liveContext();
+    const e=EX(ex);
+    if(!e || ctx.blocked[ex] || (ctx.prefs[ex]||{}).avoid || !ctx.equip.has(e.eq||"bw")
+       || (w.blocks||[]).some(b=>b.items.some(i=>i.ex===ex)))
+      return "I can't add that — "+whyRefused(ctx,ex)+".";
     const b=(w.blocks||[])[w.blocks.length-1]; if(!b) return null;
-    b.items.push(newItem({ex,reps:10})); w.edited=true; w.mins=estimateMinutes(w); save();
-    return ex+" added to block "+b.label+".";
+    const it=newItem({ex,reps:10});
+    it.role="accessory"; it.cat=catOf(ex);
+    b.items.push(it); w.edited=true; w.mins=estimateMinutes(w); save();
+    return ex+" added to block "+b.label+" — about "+w.mins+" minutes now.";
   }
   if(a.kind==="set_rounds"){
     const v=clamp(Math.round(a.value||0),1,6); if(!v) return null;
@@ -3834,36 +3959,69 @@ function runCoachAction(a){
     if(!hits.length) return null;
     hits.forEach(b=>b.rounds=v);
     w.edited=true; w.mins=estimateMinutes(w); save();
-    return (letter?"Block "+letter:"Every block")+" set to "+plural(v,"round")+".";
+    return (letter?"Block "+letter:"Every block")+" set to "+plural(v,"round")+" — about "+w.mins+" minutes.";
   }
   if(a.kind==="replace"){
     const oldEx=name(a.exercise), newEx=name(a.replacement);
     if(!oldEx||!newEx) return null;
     const f=(w.blocks||[]).flatMap(b=>b.items).find(i=>i.ex===oldEx);
     if(!f) return null;
+    const ctx=liveContext();
     if(!swapItem(w,f.id,newEx,"coach")) return null;
+    /* the engine gets the last word on whether that was allowed */
+    const bad=issuesForExercise(w,ctx,newEx);
+    if(bad.length){
+      swapItem(w,f.id,oldEx,"coach");     /* put it back */
+      save();
+      return "I'd rather not — "+whyRefused(ctx,newEx)+". "+oldEx+" stays.";
+    }
     save();
     return oldEx+" → "+newEx+".";
+  }
+  /* "give me something else for this one" — the engine chooses, not the model */
+  if(a.kind==="rotate"){
+    const oldEx=name(a.exercise); if(!oldEx) return null;
+    const f=(w.blocks||[]).flatMap(b=>b.items).find(i=>i.ex===oldEx);
+    if(!f) return null;
+    const alt=replacementsFor(w,f.id,1);
+    if(!alt.length) return "There's nothing better than "+oldEx+" for that slot today.";
+    swapItem(w,f.id,alt[0].name,"coach");
+    save();
+    return oldEx+" → "+alt[0].name+" ("+alt[0].why+").";
   }
   return null;
 }
 async function coachReply(text){
   const ctx=coachContext();
   const hist=(DB.chat||[]).slice(-8).map(m=>({role:m.who==="me"?"user":"assistant",text:m.text}));
-  const ai=await aiJSON(COACH_SYSTEM+`
+  const ai=await aiJSON(coachSystem()+`
 
-You may change today's session by returning one action.
+THE APP OWNS THE PROGRAMME. It has already chosen today's movements from her
+history, her four-week block, what she did in the last two sessions, the kit
+she has today and anything on hold after pain. You may adjust it by returning
+one action, and the app will refuse anything that breaks those rules.
+
+When she wants a different movement, prefer "rotate" — the app picks the best
+approved alternative for that slot. Only use "replace" when she names the
+movement she wants, and then choose from that item's approvedAlternatives in
+the context if you can.
+
 kind "set_duration" with value in minutes — for "I've only got 30 minutes".
 kind "rest_today" — she is not training today.
-kind "rebuild" — start the session again from the programme.
+kind "rebuild" — build today again from the programme, differently.
+kind "rotate" with exercise — swap that movement for the best alternative.
 kind "replace" with exercise and replacement — both exact catalogue names.
 kind "add" with replacement — an exact catalogue name.
 kind "remove" with exercise — an exact catalogue name in today's session.
 kind "set_rounds" with exercise as a block letter (A, B, C, or empty for all) and value as the number of rounds.
+kind "hold" with exercise — it hurt, take it out until she says otherwise.
 kind "ban" with exercise — she never wants to see it again.
 kind "none" — everything else. Say what you would do rather than pretending.
+
 Exact catalogue names: `+allNames().join(", ")+`
-Never claim to have changed something unless you returned the action for it.`,
+
+Never claim to have changed something unless you returned the action for it,
+and never state a change as done — the app appends what actually happened.`,
     {question:text, recentMessages:hist, context:ctx},
     S_CHAT,"coach_reply",420);
   if(!ai){
@@ -3872,29 +4030,51 @@ Never claim to have changed something unless you returned the action for it.`,
   const applied=runCoachAction(ai.action);
   return {message:ai.message, action:ai.action, applied};
 }
+/* Without an API key the coach still answers, from the same engine the
+   session came from. Fewer words, same facts. */
 function fallbackChat(text){
   const t=String(text||"").toLowerCase();
+  const warm=(DB.prefs&&DB.prefs.coachTone)!=="military";
   const d=today(), ci=checkinOn(d), w=sessionFor(d,false);
-  const live=!!(w&&w.state&&(w.state.startedAt||w.state.finished));
-  const later=/tomorrow|next week|monday|tuesday|wednesday|thursday|friday|later/.test(t);
-  if(later) return "I only run today. Tell me again in the morning and I'll build it then.";
+  const live=!!(w&&w.state&&(w.state.clock&&w.state.clock.startedAt||w.state.finished));
+  if(/tomorrow|next week|monday|tuesday|wednesday|thursday|friday|later/.test(t))
+    return warm? "I build one day at a time. Ask me in the morning and I'll have it ready."
+               : "I only run today. Tell me again in the morning and I'll build it then.";
   const mm=t.match(/(\d{2})\s*(?:min|minutes)/);
   if(mm){
-    if(live) return "Already under way. Change it from the session menu if you must.";
-    const nw=runCoachAction({kind:"set_duration",exercise:"",replacement:"",value:+mm[1]});
-    return nw||"Tell me a number between 10 and 120.";
+    if(live) return warm? "You're already under way — change the length from the session menu."
+                        : "Already under way. Change it from the session menu if you must.";
+    return runCoachAction({kind:"set_duration",exercise:"",replacement:"",value:+mm[1]})
+      || "Give me a number between 10 and 120.";
   }
   if(/short|quick|no time/.test(t)){
-    if(live) return "Today's session is already under way. Not rewriting it mid-set.";
-    setDuration(d,"quick"); return "Quick session set. Start now."; }
+    if(live) return warm? "Already started. Finish what's there or end it properly."
+                        : "Today's session is already under way. Not rewriting it mid-set.";
+    setDuration(d,"quick");
+    return (warm?"Quick session set — ":"Quick session set. ")+(DB.sessions[d]||{}).mins+" minutes.";
+  }
   if(/rest|skip|can'?t train|day off/.test(t)){
-    if(live) return "You already started. Finish what's on the screen or end it properly.";
-    DB.sessions[d]=restSession(d); save(); return "Marked as rest. Tomorrow is not negotiable."; }
-  if(/what.*today|plan|session/.test(t) && w) return w.title+". "+w.mins+" minutes. "+(w.blocks||[]).length+" blocks. Open Train.";
-  if(/neck/.test(t)) return "Log it in the check-in with a number. That is what changes the session.";
+    if(live) return warm? "You've already started. Finish it or end it properly — don't leave it hanging."
+                        : "You already started. Finish what's on the screen or end it properly.";
+    DB.sessions[d]=restSession(d); save();
+    return warm? "Marked as rest. See you tomorrow." : "Marked as rest. Tomorrow is not negotiable.";
+  }
+  /* "why this workout" and "something else" are answered from the engine */
+  if(/why|reason|explain/.test(t) && w && (w.why||[]).length) return w.why.join(" ");
+  if(/different|something else|bored|change it|same/.test(t)){
+    if(live) return "Tap Swap on the movement and I'll offer you three.";
+    const r=runCoachAction({kind:"rebuild",exercise:"",replacement:"",value:0});
+    return r||"Nothing to rebuild today.";
+  }
+  if(/hurt|pain|sore/.test(t))
+    return "Tell me which movement at the end of the session, or use Report pain in the session menu, and it comes out of the programme. If it's sharp or getting worse, stop and get it looked at.";
+  if(/what.*today|plan|session/.test(t) && w && !w.rest)
+    return w.title+" — "+w.mins+" minutes, "+plural((w.blocks||[]).length,"block")+". "+((w.why||[])[0]||"");
+  if(/neck/.test(t)) return "Put a number on it in the check-in. That's what changes the session.";
   if(/food|eat|calorie|protein|diet/.test(t)) return "Not this app. Training only.";
   if(!ci) return pickLine("nocheckin");
-  return "No API key, so I'm running on rails. Add one in Settings and I'll answer properly.";
+  return warm? "No API key yet, so I'm on rails. Add one in Settings and I'll answer properly."
+             : "No API key, so I'm running on rails. Add one in Settings and I'll answer properly.";
 }
 
 /* ---------- monthly review ---------- */
@@ -3902,7 +4082,7 @@ async function buildReview(monthISO){
   const st=monthStats(monthISO);
   const strength=strengthDeltas(st.month);
   const meas=measureDeltas(st.month);
-  const ai=await aiJSON(COACH_SYSTEM,
+  const ai=await aiJSON(coachSystem(),
     {task:"Write a short monthly review. Headline of three or four words. Summary of two sentences maximum. Two or three focus points for next month, each under eight words.",
      stats:st,strengthChanges:strength,measurementChanges:meas},
     S_REVIEW,"monthly_review",420);
@@ -6315,6 +6495,16 @@ async function checkMedia(){
   refresh();
 }
 
+function toneSheet(){
+  const cur=(DB.prefs.coachTone==="military")?"military":"warm";
+  const row=(k,nm,mt)=>'<button class="pick'+(cur===k?" on":"")+'" onclick="setTone(\''+k+'\')">'+
+    '<span class="grow"><span class="nm">'+nm+'</span><span class="mt">'+mt+'</span></span>'+
+    (cur===k?ICO.check:ICO.chev)+'</button>';
+  openSheet("How should the coach talk?",
+    row("warm","Warm","Encouraging and concise — a good trainer beside you")+
+    row("military","Direct","Brief, firm, accountability first"));
+}
+function setTone(k){ DB.prefs.coachTone=k; save(); closeSheet(); renderSettings(); toast("Voice changed"); }
 function renderSettings(){
   const sw=(id,on,fn)=>'<span class="switch '+(on?"on":"")+'" id="'+id+'" onclick="'+fn+'"></span>';
   el("setWrap").innerHTML=backBar("Settings","","more")+
@@ -6331,6 +6521,9 @@ function renderSettings(){
       '<div class="hint" id="aiMsg" style="margin-top:10px"></div>'+
     '</div>'+
     '<div class="card"><div class="eyebrow" style="margin-bottom:14px">Session</div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Coach\'s voice</span>'+
+        '<div class="tiny dim">'+((DB.prefs.coachTone==="military")?"Direct — brief and accountable":"Warm — encouraging and concise")+'</div></span>'+
+        '<button class="chip" onclick="toneSheet()">Change</button></div>'+
       '<div class="listrow"><span class="k">Sound on the timers</span>'+sw("swSound",DB.prefs.sound,"togglePref('sound',this)")+'</div>'+
       '<div class="listrow"><span class="k">Vibration</span>'+sw("swVib",DB.prefs.vibrate,"togglePref('vibrate',this)")+'</div>'+
       '<div class="listrow"><span class="k">Cycle tracking</span>'+sw("swCycle",DB.prefs.cycleOn,"togglePref('cycleOn',this)")+'</div>'+
