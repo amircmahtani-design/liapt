@@ -752,7 +752,20 @@ const DEFAULTS = {
     /* Equipment she gravitates to. It biases what a swap offers first;
        it never removes anything from the programme. */
     favourEquipment:["band"] },
-  seenIntro: false
+  seenIntro: false,
+  /* The coach's memory. Everything here is written by the engine, saved
+     with every other change and carried to the cloud with the rest. */
+  coach: {
+    blockStart:null,     /* the Monday the current four-week block began */
+    anchors:{},          /* slot -> the movement held there, and since when */
+    progress:{},         /* exercise -> which variable moved last */
+    feedback:[],         /* [{date, effort, pain, loved, disliked}] */
+    exStats:{},          /* exercise -> {done, skipped, loved, disliked} */
+    blocked:{},          /* exercise -> {why, since} after a pain report */
+    sigs:[],             /* recent session signatures, for the 30-day rule */
+    asked:{},            /* exercise -> the day we asked why it keeps getting skipped */
+    nonce:0              /* bumped by a deliberate rebuild, so it differs */
+  }
 };
 
 /* ---------- tiny utils ---------- */
@@ -2230,6 +2243,572 @@ const COOLDOWN_BY_FOCUS = {
 };
 
 /* =====================================================================
+   THE PROGRAMME
+   The week says what today is about. This says which movements carry it,
+   how hard they are, and why — from what she has actually done, not from
+   a fixed list. Deterministic: the same day, the same history and the same
+   check-in always produce the same session, so a reload never reshuffles
+   her workout. The model is asked to choose between options this code has
+   already approved, and to write the sentence. It never invents the plan.
+   ===================================================================== */
+
+/* ---------- movement categories ----------
+   Rotation happens inside a category, never across one. A squat is
+   replaced by another squat, not by a stretch. */
+const CATS = {
+  squat:        {label:"Squat",          pats:["squat"]},
+  hinge:        {label:"Hinge",          pats:["hinge"]},
+  lunge:        {label:"Single-leg",     pats:["lunge"]},
+  glute:        {label:"Glute isolation",pats:["thrust","abduction"]},
+  push:         {label:"Push",           pats:["push-h","push-v"]},
+  pull:         {label:"Pull",           pats:["pull-h","pull-v"]},
+  core:         {label:"Core & stability",pats:["core-anti-ext","core-anti-rot","core-anti-lat","core-flex","core-ext","carry","breath"]},
+  mobility:     {label:"Mobility",       pats:["mobility","neck"]},
+  conditioning: {label:"Conditioning",   pats:["cardio"]},
+  accessory:    {label:"Accessory",      pats:["curl","extension","calf"]}
+};
+const PAT_CAT = (()=>{ const m={}; Object.keys(CATS).forEach(c=>CATS[c].pats.forEach(p=>m[p]=c)); return m; })();
+function catOf(ex){ const e=EX(ex); return (e && PAT_CAT[e.pat]) || "mobility"; }
+function catLabel(c){ return (CATS[c]||{}).label || c; }
+
+/* Loadable means we can measure progress on it. Those are the movements
+   worth holding for several weeks; everything else rotates. */
+function isLoadable(ex){ const e=EX(ex)||{}; return e.load==="kg" || e.load==="band"; }
+/* The catalogue grades itself: every movement names an easier and a harder
+   version. Anything that other movements point to as "harder", and that has
+   no harder version of its own, is the top of its chain. */
+const ADVANCED = (()=>{
+  const named=new Set();
+  EX_NAMES.forEach(n=>{ const h=(EXDB[n]||{}).harder; if(h && h!==n) named.add(h); });
+  const out=new Set();
+  named.forEach(n=>{ const e=EXDB[n]; if(e && (!e.harder || e.harder===n)) out.add(n); });
+  return out;
+})();
+function isAdvanced(ex){ return ADVANCED.has(ex); }
+/* Conditioning is meant to stay low-impact and away from the loaded
+   stations — a bench press is not a circuit movement. */
+const CIRCUIT_EQ = ["bw","band","kb","trx","ball","row","db"];
+function isTimed(ex){ return (EX(ex)||{}).load==="time"; }
+
+/* ---------- coach memory ----------
+   Everything the engine needs to not repeat itself lives in DB and is
+   saved with every other change, so a refresh never loses it. */
+function coach(){
+  if(!DB.coach) DB.coach={};
+  const c=DB.coach;
+  c.anchors=c.anchors||{}; c.progress=c.progress||{}; c.feedback=c.feedback||[];
+  c.exStats=c.exStats||{}; c.blocked=c.blocked||{}; c.sigs=c.sigs||[];
+  c.asked=c.asked||{}; c.nonce=c.nonce||0;
+  return c;
+}
+function exStat(ex){ const c=coach(); return c.exStats[ex] || (c.exStats[ex]={done:0,skipped:0,loved:0,disliked:0}); }
+
+/* Sessions before a date, newest first. "Prescribed" is what the app put on
+   screen; "performed" is what she actually logged work against. */
+function priorSessions(dateISO,n){
+  const d=dateISO||today();
+  return Object.keys(DB.sessions||{}).filter(k=>k<d).sort().reverse()
+    .map(k=>DB.sessions[k]).filter(s=>s && !s.rest && !s.deleted && (s.blocks||[]).length)
+    .slice(0,n||10);
+}
+function sessionWasPerformed(s){
+  if(!s||!s.state) return false;
+  if(s.state.finished) return true;
+  return Object.keys(s.state.done||{}).length>0;
+}
+function performedSessions(dateISO,n){
+  return priorSessions(dateISO,60).filter(sessionWasPerformed).slice(0,n||10);
+}
+function exercisesIn(s){
+  const out=[]; (s.blocks||[]).forEach(b=>b.items.forEach(i=>out.push(i.ex))); return out;
+}
+/* exercise -> the most recent date it was put on screen at all */
+function shownMap(dateISO){
+  const map={};
+  priorSessions(dateISO,20).forEach(s=>{
+    exercisesIn(s).forEach(ex=>{ if(!map[ex] || map[ex]<s.date) map[ex]=s.date; });
+  });
+  return map;
+}
+/* exercise -> the most recent date it appeared in a performed session */
+function usageMap(dateISO){
+  const map={};
+  performedSessions(dateISO,40).forEach(s=>{
+    exercisesIn(s).forEach(ex=>{ if(!map[ex] || map[ex]<s.date) map[ex]=s.date; });
+  });
+  Object.keys(DB.strength||{}).forEach(ex=>{
+    (DB.strength[ex]||[]).forEach(e=>{ if(e.date<dateISO && (!map[ex]||map[ex]<e.date)) map[ex]=e.date; });
+  });
+  return map;
+}
+
+/* ---------- the four-week block ---------- */
+function blockStart(){
+  const c=coach();
+  if(!c.blockStart){
+    const first = startedOn() || today();
+    c.blockStart = weekStart(first);
+  }
+  return c.blockStart;
+}
+function blockWeek(dateISO){
+  const weeks = Math.floor(daysBetween(blockStart(), weekStart(dateISO||today()))/7);
+  return ((weeks%4)+4)%4 + 1;
+}
+const BLOCK_NOTE = {
+  1:"Week 1 of 4 — settle the technique and set the baseline.",
+  2:"Week 2 of 4 — one step up from last week.",
+  3:"Week 3 of 4 — the strongest week of the block.",
+  4:"Week 4 of 4 — lighter on purpose, so week 1 starts fresh."
+};
+
+/* ---------- a stable, seeded shuffle ----------
+   Randomness she can reproduce: the same day gives the same session, a
+   deliberate rebuild gives a different one. */
+function hash32(str){
+  let h=2166136261>>>0;
+  for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  return h>>>0;
+}
+function jitter(seed){ return (hash32(seed)%1000)/1000; }
+
+/* ---------- slots ----------
+   The weekly templates stay exactly as written — they are the shape of the
+   day. Each item becomes a slot: a category, a starting movement and a
+   role. Block A's loaded work is anchored and held; the rest rotates. */
+function slotsFor(plan,variant){
+  const src = plan[variant] || plan.full;
+  let anchorsLeft = 2;
+  return src.map((b,bi)=>({
+    label:b.label, rounds:b.rounds, rest:b.rest, flow:!!b.flow, straight:!!b.straight,
+    items: b.items.map((it,ii)=>({
+      key: plan.key+"/"+b.label+(ii+1),
+      kind: plan.kind,
+      circuit: !!b.flow || plan.kind==="hiit" || b.items.length>2,
+      seed: it.ex,
+      cat: catOf(it.ex),
+      pat: (EX(it.ex)||{}).pat,
+      loaded: isLoadable(it.ex),
+      timed: !!it.time,
+      role: (bi===0 && isLoadable(it.ex) && !b.flow && anchorsLeft-- > 0) ? "anchor" : "accessory",
+      reps: it.reps!=null? it.reps : null,
+      time: it.time||null,
+      side: !!it.side
+    }))
+  }));
+}
+
+/* ---------- what today has to work with ---------- */
+const ALL_EQUIP = ["bb","db","cable","smith","band","trx","bw","kb","ball","row","bar","bench"];
+function equipToday(ci){
+  const list = (ci && Array.isArray(ci.equip) && ci.equip.length)? ci.equip : ALL_EQUIP;
+  const s=new Set(list); s.add("bw");            /* her body is always available */
+  return s;
+}
+function buildContext(dateISO,ci){
+  const date=dateISO||today();
+  const prev=priorSessions(date,10);
+  const perf=performedSessions(date,10);
+  const recent2=new Set(); perf.slice(0,2).forEach(s=>exercisesIn(s).forEach(e=>recent2.add(e)));
+  const prevSet=new Set(prev.length? exercisesIn(prev[0]) : []);
+  const c=coach();
+  const fb=(c.feedback||[]).slice(-1)[0]||null;
+  return {
+    date,
+    week: blockWeek(date),
+    neck: ci? (+ci.neck||0) : neckToday(),
+    pain: ci? (+ci.pain||0) : 0,
+    sore: ci? (+ci.soreness||0) : 0,
+    soreArea: (ci&&ci.soreArea)||"none",
+    energy: ci? (+ci.energy||6) : 6,
+    pelvic: (ci && Array.isArray(ci.pelvic) && ci.pelvic.length)? true : false,
+    equip: equipToday(ci),
+    blocked: c.blocked||{},
+    prefs: DB.exPrefs||{},
+    recent2, prevSet,
+    prevExercises: prev.length? exercisesIn(prev[0]) : [],
+    usage: usageMap(date),
+    shown: shownMap(date),
+    lastFeedback: fb,
+    history10: perf,
+    nonce: c.nonce||0
+  };
+}
+
+/* ---------- candidate filtering ---------- */
+function slotCandidates(slot,ctx,taken){
+  const focusOK = slot.cat;
+  return allNames().filter(nm=>{
+    const e=EX(nm); if(!e) return false;
+    if(UNAVAILABLE.test(nm)) return false;
+    if(taken.has(nm)) return false;
+    if(catOf(nm)!==focusOK) return false;
+    if(!ctx.equip.has(e.eq||"bw")) return false;
+    if(ctx.blocked[nm]) return false;
+    if((ctx.prefs[nm]||{}).avoid) return false;
+    if(ctx.neck>=5 && ((e.tags||[]).includes("overhead")||(e.tags||[]).includes("neck-sensitive"))) return false;
+    if((ctx.pelvic||ctx.pain>=5) && (e.tags||[]).includes("impact")) return false;
+    /* a loaded compound is only ever replaced by something else we can load */
+    if(slot.loaded && !isLoadable(nm)) return false;
+    if(!slot.loaded && slot.timed && !isTimed(nm) && !(e.tags||[]).includes("floor")) return false;
+    return true;
+  });
+}
+
+/* ---------- scoring ----------
+   Variety with a reason. Novelty is worth something; never having repeated
+   a movement she is progressing on is worth more. */
+function scoreCandidate(nm,slot,ctx){
+  const e=EX(nm)||{}, seed=EX(slot.seed)||{};
+  const c=coach();
+  const anchor=c.anchors[slot.key];
+  let s=0;
+  if(slot.role==="anchor" && anchor && anchor.ex===nm) s+=40;
+  if(e.pat===slot.pat) s+=12;
+  if(nm===slot.seed) s += slot.role==="anchor"? 22 : 4;
+  if(ctx.week===1 && nm===slot.seed) s+=10;      /* week one is the baseline */
+  const last=ctx.usage[nm];
+  if(!last) s+=8;
+  else {
+    const ago=daysBetween(last,ctx.date);
+    s += Math.min(ago,60)/4;
+    if(ago<14) s -= (14-ago)*2.5;                /* seen this fortnight — let it rest */
+  }
+  const shown=ctx.shown[nm];
+  if(shown){
+    const sAgo=daysBetween(shown,ctx.date);
+    if(sAgo<14) s -= (14-sAgo)*1.5;            /* she has seen it lately, done or not */
+  }
+  if(ctx.recent2.has(nm)) s-=50;
+  if(ctx.prevSet.has(nm)) s-=25;
+  /* a movement at the top of its chain is earned, not handed out */
+  if(isAdvanced(nm) && !last && ctx.week<3) s-=14;
+  if(isAdvanced(nm) && ctx.energy<=4) s-=8;
+  if(slot.circuit){
+    if(!CIRCUIT_EQ.includes(e.eq||"bw")) s-=16;  /* keep circuits off the rack */
+    if((e.tags||[]).includes("impact")) s-=10;   /* low impact, by design */
+  }
+  const st=(c.exStats||{})[nm]||{};
+  s += (st.loved||0)*5 - (st.disliked||0)*6 - Math.max(0,(st.skipped||0)-(st.done||0))*8;
+  if((ctx.prefs[nm]||{}).love) s+=5;
+  if((DB.prefs.favourEquipment||[]).includes(e.eq)) s+=4;
+  if(hasRealMedia(nm)) s+=3;
+  if(ctx.pelvic && (e.tags||[]).includes("pelvic-safe")) s+=4;
+  /* week three reaches for the harder version, week four for the kinder one */
+  if(ctx.week===3 && seed.harder===nm) s+=6;
+  if(ctx.week===4 && seed.easier===nm) s+=6;
+  if(ctx.energy<=3 && seed.easier===nm) s+=5;
+  if(ctx.energy>=9 && seed.harder===nm) s+=4;
+  s += jitter(ctx.date+"|"+slot.key+"|"+nm+"|"+ctx.nonce)*5;
+  return s;
+}
+const NEIGHBOUR = {
+  squat:["lunge"], lunge:["squat"], hinge:["glute"], glute:["hinge"],
+  core:["mobility"], mobility:["core"], conditioning:["lunge","core"],
+  accessory:["push","pull"], push:["accessory"], pull:["accessory"]
+};
+function pickForSlot(slot,ctx,taken){
+  let cands=slotCandidates(slot,ctx,taken);
+  /* everything left is something she did in the last two sessions — widen
+     into the neighbouring category before repeating herself */
+  if(cands.length && cands.every(n=>ctx.recent2.has(n))){
+    (NEIGHBOUR[slot.cat]||[]).forEach(alt=>{
+      const wider=slotCandidates({...slot,cat:alt},ctx,taken).filter(n=>!ctx.recent2.has(n));
+      cands=cands.concat(wider);
+    });
+  }
+  /* still nothing — she may have only her body today, and the slot wanted a
+     barbell. Drop the loaded requirement before dropping the movement. */
+  if(!cands.length) cands=slotCandidates({...slot,loaded:false,timed:false},ctx,taken);
+  if(!cands.length){
+    (NEIGHBOUR[slot.cat]||[]).forEach(alt=>{
+      cands=cands.concat(slotCandidates({...slot,cat:alt,loaded:false,timed:false},ctx,taken));
+    });
+  }
+  if(!cands.length){
+    /* the template movement, but only if she can actually do it today */
+    const e=EX(slot.seed);
+    if(e && ctx.equip.has(e.eq||"bw") && !ctx.blocked[slot.seed] && !(ctx.prefs[slot.seed]||{}).avoid
+       && !taken.has(slot.seed)) return slot.seed;
+    return null;   /* the caller drops the slot rather than prescribe the impossible */
+  }
+  cands.sort((a,b)=>scoreCandidate(b,slot,ctx)-scoreCandidate(a,slot,ctx));
+  return cands[0];
+}
+
+/* ---------- progression ----------
+   One variable at a time, and the variable rotates. Reps until they are
+   high, then load and reps back to the floor; a timed movement grows its
+   interval. Feedback overrules the schedule. */
+const REP_CEIL = 15, REP_FLOOR = 8;
+function progressionFor(ex,slot,ctx){
+  const base = {reps:slot.reps, time:slot.time, why:null, kind:null};
+  if(ctx.week===1) return base;                     /* week one is the baseline */
+  const c=coach();
+  const fb=ctx.lastFeedback;
+  const st=(c.progress||{})[ex]||{};
+  const hard = fb && fb.effort==="hard";
+  const easy = fb && fb.effort==="easy";
+
+  /* week four is the lighter week: back to the baseline, volume comes off
+     in buildSession rather than here */
+  if(ctx.week===4) return {...base, why:"lighter week", kind:"deload"};
+
+  const step = (ctx.week===3? 2 : 1) + (easy?1:0) - (hard?1:0);
+  if(step<=0) return {...base, why: hard? "you said last session was hard":null, kind:hard?"hold":null};
+
+  if(typeof base.time==="number"){
+    const t=clamp(Math.round(base.time + step*5), 15, 120);
+    return {...base, time:t, kind:"interval",
+      why: t>base.time? ("holding "+t+"s instead of "+base.time+"s") : null};
+  }
+  if(typeof base.reps==="number"){
+    const lastVar=st.lastVar;
+    const loaded=isLoadable(ex);
+    /* reps have topped out and we can add weight instead — that is the
+       one change this week, so reps go back to the bottom of the range */
+    if(loaded && base.reps+step > REP_CEIL && lastVar!=="load"){
+      return {...base, reps:REP_FLOOR, kind:"load",
+        why:"reps are at the top, so the weight goes up and the reps reset"};
+    }
+    const r=clamp(base.reps+step, REP_FLOOR, REP_CEIL);
+    if(r===base.reps) return base;
+    return {...base, reps:r, kind:"reps", why:base.reps+" to "+r+" reps"};
+  }
+  return base;
+}
+function noteProgress(ex,kind){
+  if(!kind || kind==="deload") return;
+  const c=coach();
+  c.progress[ex]={...(c.progress[ex]||{}), lastVar:kind, at:today()};
+}
+
+/* ---------- the day, possibly overridden ----------
+   "Choose for me" uses the week. Anything else picks the day whose shape
+   fits what she asked for, keeping the day's own warm-up and cool-down. */
+const FOCUS_DAY = { glutes:1, upper:2, legs:3, conditioning:4, core:5 };
+const FOCUS_LABEL = { auto:"Choose for me", glutes:"Glutes", upper:"Upper body",
+                      legs:"Legs", core:"Core", mobility:"Mobility", conditioning:"Conditioning" };
+const MOBILITY_DAY = {
+  key:"mob", tag:"Mobility", title:"Mobility & Breathing", focus:["mobility","deep-core"], kind:"mobility",
+  full:[{label:"A",rounds:2,rest:30,flow:true,items:[
+          {ex:"Cat-Cow",time:60},{ex:"Open Book",time:45,side:true},
+          {ex:"World's Greatest Stretch",time:45,side:true},{ex:"Thread the Needle",time:45,side:true}]},
+        {label:"B",rounds:2,rest:30,flow:true,items:[
+          {ex:"90/90 Hip Switch",time:45},{ex:"Downward Dog",time:45},{ex:"Glute Stretch",time:45,side:true}]}],
+  short:[{label:"A",rounds:1,rest:20,flow:true,items:[
+          {ex:"Cat-Cow",time:60},{ex:"Open Book",time:45,side:true},{ex:"Glute Stretch",time:40,side:true}]}]
+};
+function planForDay(dateISO,ci){
+  const base=dayPlan(dateISO);
+  const want=(ci&&ci.focus)||"auto";
+  if(want==="mobility") return MOBILITY_DAY;
+  if(want!=="auto" && FOCUS_DAY[want]) return WEEK[FOCUS_DAY[want]]||base;
+  /* she didn't ask, but she told us what is sore */
+  if(base && ci){
+    const sore=(ci.soreArea||"none");
+    const legDay=(base.focus||[]).some(f=>["glutes","quads","hamstrings"].includes(f));
+    if(sore==="legs" && legDay){
+      /* alternate, so a sore week is not the same upper session on repeat */
+      const prev=priorSessions(dateISO,1)[0];
+      return (prev && prev.dayKey==="tue")? MOBILITY_DAY : WEEK[2];
+    }
+    if(sore==="upper" && (base.focus||[]).some(f=>["back","upper-back","chest","shoulders"].includes(f))) return WEEK[1];
+    if(sore==="all" && (+ci.energy||6)<=4) return MOBILITY_DAY;
+  }
+  return base;
+}
+
+/* ---------- warm-up and cool-down, rotated ----------
+   The neck work is fixed, because it is the point. The rest moves. */
+function rotateList(list,seed,n){
+  if(list.length<=n) return list.slice();
+  const start=Math.floor(jitter(seed)*list.length);
+  const out=[];
+  for(let i=0;i<list.length && out.length<n;i++) out.push(list[(start+i)%list.length]);
+  return out;
+}
+function buildCooldownV(focus,dateISO,nonce){
+  const names=[];
+  (focus||[]).forEach(f=>{ (COOLDOWN_BY_FOCUS[f]||[]).forEach(n=>{ if(!names.includes(n)) names.push(n); }); });
+  ["Child's Pose","90/90 Breathing","Glute Stretch","Thread the Needle","Sphinx Pose","Open Book"]
+    .forEach(n=>{ if(!names.includes(n) && EX(n)) names.push(n); });
+  const picked=rotateList(names,(dateISO||"")+"/cool/"+(nonce||0),4);
+  const secs=(DB.prefs.cooldownSec||40);
+  return picked.map(n=>{ const e=EX(n)||{};
+    return newItem({ex:n,time:secs,side:(e.tags||[]).includes("unilateral")||/Stretch|Open Book|Thread/.test(n)}); });
+}
+
+/* ---------- the signature ----------
+   Two sessions are "the same workout" when the same movements appear in the
+   same order. That is what may not come round again inside a month. */
+function sessionSignature(w){
+  return (w.blocks||[]).map(b=>b.label+":"+b.items.map(i=>i.ex).join(">")).join("|");
+}
+function rememberSignature(w){
+  const c=coach();
+  c.sigs=(c.sigs||[]).filter(x=>daysBetween(x.date,w.date)<45 && x.date!==w.date);
+  c.sigs.push({date:w.date, sig:sessionSignature(w)});
+}
+
+/* ---------- validation ----------
+   Nothing reaches the screen without passing this, whether the engine or
+   the coach proposed it. */
+function overlapWithPrevious(w,ctx){
+  const names=exercisesIn(w);
+  if(!names.length || !ctx.prevExercises.length) return 0;
+  const prev=new Set(ctx.prevExercises);
+  return names.filter(n=>prev.has(n)).length/names.length;
+}
+function validateSession(w,ctx){
+  const issues=[];
+  const c=coach();
+  const seen=new Set();
+  (w.blocks||[]).forEach(b=>b.items.forEach(it=>{
+    const e=EX(it.ex);
+    if(!e){ issues.push({code:"unknown",itemId:it.id,msg:it.ex+" is not in the catalogue"}); return; }
+    if(seen.has(it.ex)) issues.push({code:"duplicate",itemId:it.id,msg:it.ex+" appears twice"});
+    seen.add(it.ex);
+    if(ctx.blocked[it.ex]) issues.push({code:"blocked",itemId:it.id,msg:it.ex+" is flagged for pain"});
+    if((ctx.prefs[it.ex]||{}).avoid) issues.push({code:"avoided",itemId:it.id,msg:it.ex+" is on her avoid list"});
+    if(!ctx.equip.has(e.eq||"bw")) issues.push({code:"equipment",itemId:it.id,msg:it.ex+" needs kit she hasn't got today"});
+    if(ctx.neck>=5 && ((e.tags||[]).includes("overhead")||(e.tags||[]).includes("neck-sensitive")))
+      issues.push({code:"neck",itemId:it.id,msg:it.ex+" loads the neck"});
+    if(ctx.recent2.has(it.ex) && it.role!=="anchor")
+      issues.push({code:"recent",itemId:it.id,msg:it.ex+" was in one of the last two sessions"});
+  }));
+  const ov=overlapWithPrevious(w,ctx);
+  if(ov>0.4) issues.push({code:"overlap",msg:Math.round(ov*100)+"% of this session was in the last one"});
+  const sig=sessionSignature(w);
+  if((c.sigs||[]).some(x=>x.sig===sig && x.date!==w.date && daysBetween(x.date,w.date)<30))
+    issues.push({code:"repeat",msg:"this exact session ran inside the last 30 days"});
+  const mins=estimateMinutes(w);
+  if(w.targetMins && Math.abs(mins-w.targetMins) > Math.max(8,w.targetMins*0.25))
+    issues.push({code:"duration",msg:mins+" minutes against a target of "+w.targetMins});
+  return issues;
+}
+
+/* Re-pick whatever failed, a bounded number of times, then accept what is
+   left rather than hand her an empty screen. */
+function repairSession(w,ctx){
+  for(let pass=0; pass<4; pass++){
+    const issues=validateSession(w,ctx);
+    const fixable=issues.filter(i=>i.itemId);
+    const structural=issues.filter(i=>i.code==="overlap"||i.code==="repeat");
+    if(!fixable.length && !structural.length) return issues;
+    const taken=new Set(exercisesIn(w));
+    let changed=false;
+    const retry=(it,block)=>{
+      const slot=it.slot? {...it.slot} : null;
+      if(!slot) return;
+      taken.delete(it.ex);
+      const banned=new Set([...taken, it.ex]);
+      const alt=pickForSlot(slot,ctx,banned);
+      if(alt && alt!==it.ex){
+        const e=EX(alt)||{};
+        it.ex=alt; it.load=e.load||"bw"; it.weight=null;
+        const s=suggestLoad(alt); if(s) it.weight=s.kg;
+        taken.add(alt); changed=true;
+      } else { taken.add(it.ex); }
+    };
+    fixable.forEach(i=>{
+      (w.blocks||[]).forEach(b=>{ const it=b.items.find(x=>x.id===i.itemId); if(it) retry(it,b); });
+    });
+    if(!changed && structural.length){
+      /* the whole shape came round again — rotate the accessories hardest */
+      (w.blocks||[]).forEach(b=>b.items.forEach(it=>{ if(it.role!=="anchor") retry(it,b); }));
+      /* still the same session: then even the held lifts give way */
+      if(!changed) (w.blocks||[]).forEach(b=>b.items.forEach(it=>{
+        if(it.role==="anchor"){ it.role="accessory"; retry(it,b); }
+      }));
+    }
+    if(!changed) break;
+    w.mins=estimateMinutes(w);
+  }
+  return validateSession(w,ctx);
+}
+
+
+/* ---------- what she says afterwards ----------
+   Three taps at the end of a session, and every one of them changes the
+   next one. Nothing here is advice; it is all arithmetic on her own words. */
+function blockExercise(ex,why){
+  if(!EX(ex)) return false;
+  coach().blocked[ex]={why:why||"pain reported", since:today()};
+  save(); return true;
+}
+function unblockExercise(ex){ delete coach().blocked[ex]; save(); }
+function blockedList(){ const b=coach().blocked||{}; return Object.keys(b).map(ex=>({ex,...b[ex]})); }
+function noteSkipped(ex){ exStat(ex).skipped++; save(); }
+function noteDone(ex){ exStat(ex).done++; save(); }
+
+function recordFeedback(w,fb){
+  const c=coach();
+  const one=v=>v? (Array.isArray(v)?v:[v]) : [];
+  const rec={ date:w.date, effort:fb.effort||"right",
+              pain:one(fb.painEx||fb.pain), loved:one(fb.loved), disliked:one(fb.disliked) };
+  c.feedback=(c.feedback||[]).filter(f=>f.date!==w.date);
+  c.feedback.push(rec);
+  if(c.feedback.length>60) c.feedback=c.feedback.slice(-60);
+  rec.loved.forEach(ex=>{ if(EX(ex)){ exStat(ex).loved++; DB.exPrefs[ex]={...(DB.exPrefs[ex]||{}),love:true}; } });
+  rec.disliked.forEach(ex=>{ if(!EX(ex)) return; const st=exStat(ex); st.disliked++; });
+  rec.pain.forEach(ex=>blockExercise(ex,"it hurt on "+uk(w.date)));
+  save();
+  return rec;
+}
+/* One short question, once, about the movement she keeps stepping past —
+   rather than prescribing it again and again and hoping. */
+function skipQuestion(){
+  const c=coach();
+  const stats=c.exStats||{};
+  const ex=Object.keys(stats).find(n=>{
+    const st=stats[n];
+    return st.skipped>=3 && st.skipped>st.done && !c.asked[n] && EX(n) && !c.blocked[n];
+  });
+  return ex||null;
+}
+function answerSkip(ex,answer){
+  const c=coach();
+  c.asked[ex]=today();
+  if(answer==="hurts") blockExercise(ex,"she said it hurts");
+  else if(answer==="hate"){ exStat(ex).disliked+=2; }
+  else if(answer==="hard"){ const e=EX(ex); if(e&&e.easier&&EX(e.easier)) DB.exPrefs[e.easier]={...(DB.exPrefs[e.easier]||{}),love:true}; exStat(ex).disliked++; }
+  save(); closeSheet(); toast("Noted — you'll see less of it");
+}
+
+/* ---------- why this workout ----------
+   Three short reasons, each from something real. */
+function buildWhy(w,ctx,kept,rotated){
+  /* In priority order, then the best three. Something true always comes
+     first; the filler only appears when there is nothing better to say. */
+  const out=[];
+  const add=t=>{ if(t && !out.includes(t)) out.push(t); };
+
+  const repeated=(w.issues||[]).filter(i=>i.code==="recent");
+  if(repeated.length) add("You've trained this pattern several days running, so "+
+    plural(repeated.length,"movement")+" had to come round again — there aren't more to rotate through.");
+
+  if(ctx.soreArea==="legs") add("Your legs are sore, so today leans on the upper body and core.");
+  else if(ctx.soreArea==="upper") add("Your upper body is sore, so today is legs and glutes.");
+  if(ctx.pain>=5 || ctx.pelvic) add("You reported discomfort, so the pressure and impact work is out.");
+  if(ctx.neck>=4) add("The neck was tight at check-in, so the overhead loading is out.");
+
+  if(kept.length){
+    const k=kept[0];
+    add("Keeping "+k.ex+(k.why? " so you can go "+k.why : " so we can measure the progress")+".");
+  }
+  if(ctx.lastFeedback && ctx.lastFeedback.effort==="easy") add("Last session felt easy, so the working numbers went up.");
+  else if(ctx.lastFeedback && ctx.lastFeedback.effort==="hard") add("Last session felt hard, so nothing new gets added today.");
+  else if(ctx.energy<=3) add("You checked in low, so the volume is down and the rests are longer.");
+
+  add(BLOCK_NOTE[ctx.week]);
+  if(rotated.length) add(plural(rotated.length,"accessory movement")+" changed — you did the others this week.");
+  if(w.targetMins) add("Built to about "+w.mins+" minutes, which is what you asked for.");
+  return out.slice(0,3);
+}
+
+
+/* =====================================================================
    THE ENGINE
    Everything that CHANGES state is decided here, in code. The model is
    asked to judge and to phrase, never to act. That is the one lesson
@@ -2487,10 +3066,6 @@ function nearestPreset(mins){
   DURATION_PRESETS.forEach(k=>{ const g=Math.abs(durationMins(k)-mins); if(g<gap){gap=g;best=k;} });
   return gap<=4? best : "custom";
 }
-function blockFromTemplate(b){
-  return { label:b.label, rounds:b.rounds, rest:b.rest, flow:!!b.flow,
-           straight:!!b.straight, items:b.items.map(newItem) };
-}
 /* Fit the day's template to a target number of minutes. */
 function fitToTime(w, targetMins){
   const floorRounds=b=>b.flow?1:2;
@@ -2515,12 +3090,25 @@ function fitToTime(w, targetMins){
   w.mins=estimateMinutes(w);
   return w;
 }
+/* Anchors are held for a block, then released so the next block can choose
+   again. Pain, an avoid flag or a disappearance from the catalogue releases
+   one early. */
+function refreshAnchors(dateISO,ctx){
+  const c=coach();
+  Object.keys(c.anchors||{}).forEach(k=>{
+    const a=c.anchors[k];
+    if(!a || !a.ex) { delete c.anchors[k]; return; }
+    if(!EX(a.ex) || ctx.blocked[a.ex] || (ctx.prefs[a.ex]||{}).avoid){ delete c.anchors[k]; return; }
+    if(daysBetween(a.since,dateISO) >= 28) delete c.anchors[k];
+  });
+}
+
 /* mode: "full" | "short" | a preset key | a number of minutes */
 function buildSession(dateISO,mode){
   const date=dateISO||today();
-  const plan=dayPlan(date);
-  if(!plan) return restSession(date);
   const ci=checkinOn(date);
+  const plan=planForDay(date,ci);
+  if(!plan) return restSession(date);
   const neck=ci? (+ci.neck||0) : 0;
 
   let targetMins, durKey;
@@ -2531,19 +3119,60 @@ function buildSession(dateISO,mode){
 
   /* Under half an hour, start from the purpose-built short template so the
      session is coherent rather than a squeezed version of the long one. */
-  const source = targetMins<=26 ? (plan.short||plan.full) : plan.full;
+  const variant = targetMins<=26 ? "short" : "full";
+  if(plan.kind==="mobility") targetMins=Math.min(targetMins,32);
+  const ctx = buildContext(date,ci);
+  refreshAnchors(date,ctx);
+  const c=coach();
+  const taken=new Set();
+  const kept=[], rotated=[];
+
+  const blocks = slotsFor(plan,variant).map(sb=>({
+    label:sb.label, rounds:sb.rounds, rest:sb.rest, flow:sb.flow, straight:sb.straight,
+    items: sb.items.map(slot=>{
+      const ex = pickForSlot(slot,ctx,taken);
+      if(!ex || !EX(ex)) return null;   /* nothing fits today — drop the slot */
+      taken.add(ex);
+      const prog = progressionFor(ex,slot,ctx);
+      const it = newItem({ex, reps:prog.reps, time:prog.time, side:slot.side});
+      it.slot = {key:slot.key, cat:slot.cat, pat:slot.pat, seed:slot.seed,
+                 loaded:slot.loaded, timed:slot.timed, role:slot.role,
+                 reps:slot.reps, time:slot.time, side:slot.side};
+      it.role = slot.role;
+      it.cat  = slot.cat;
+      if(prog.why)  it.progressWhy  = prog.why;
+      if(prog.kind) it.progressKind = prog.kind;
+      if(slot.role==="anchor"){
+        const a=c.anchors[slot.key];
+        if(a && a.ex===ex && a.since<date) kept.push({ex, why:prog.why});
+        if(!a || a.ex!==ex) c.anchors[slot.key]={ex, since:date};
+      } else if(ex!==slot.seed){ rotated.push(ex); }
+      return it;
+    }).filter(Boolean)
+  })).filter(b=>b.items.length);
+
+  /* week four is the lighter week — the volume comes off here, not the reps */
+  if(ctx.week===4) blocks.forEach(b=>{ if(!b.flow) b.rounds=Math.max(2,(b.rounds||3)-1); });
+
   const w={
     date, dayKey:plan.key, title:plan.title, tag:plan.tag, kind:plan.kind, focus:plan.focus,
-    mode: targetMins<=26?"short":"full", duration:durKey, targetMins,
+    mode: variant, duration:durKey, targetMins,
+    blockWeek: ctx.week,
     prep:buildPrep(plan.focus,neck),
-    blocks:source.map(blockFromTemplate),
-    cooldown:buildCooldown(plan.focus),
+    blocks,
+    cooldown:buildCooldownV(plan.focus,date,ctx.nonce),
     adjustments:[], analysis:null, generatedAt:Date.now(), edited:false,
     state:freshState(), log:{}
   };
   fitToTime(w,targetMins);
+  w.issues = repairSession(w,ctx);
+  fitToTime(w,targetMins);
+  rememberSignature(w);
+  w.why = buildWhy(w,ctx,kept,rotated);
+  w.mins = estimateMinutes(w);
   return w;
 }
+
 function freshState(){
   return { b:0, i:0, r:1, done:{}, phase:"ready",
            prepDone:{}, coolDone:{},
@@ -2793,6 +3422,14 @@ function completeSession(w){
   w.completedAt=Date.now();
   const {done,total}=sessionSetsDone(w);
   w.completion = total? Math.round(done/total*100) : 0;
+  /* the engine only learns from work that actually happened */
+  const state=w.state.done||{};
+  (w.blocks||[]).forEach(b=>b.items.forEach(it=>{
+    const keys=Object.keys(state).filter(k=>k.endsWith("-"+it.id));
+    const didAny=keys.some(k=>!state[k].skipped);
+    if(didAny){ noteDone(it.ex); if(it.progressKind) noteProgress(it.ex,it.progressKind); }
+    else if(keys.length) noteSkipped(it.ex);
+  }));
   updateStreak(w.date);
   save();
 }
