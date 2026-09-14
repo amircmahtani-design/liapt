@@ -104,8 +104,12 @@ p{margin:0;text-wrap:pretty;}
 .btn.sec{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1);border:1px solid var(--line);}
 .btn.ghost{background:transparent;color:var(--ink-2);box-shadow:none;border:1px solid var(--line);}
 .btn.quiet{background:var(--bg-2);color:var(--ink);box-shadow:none;}
-.btn.sm{min-height:44px;font-size:14.5px;padding:0 var(--s4);border-radius:var(--r-sm);}
+.btn.sm{min-height:44px;font-size:14.5px;padding:0 10px;border-radius:var(--r-sm);}
+.btn .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.btn-row .btn{min-width:0;}
 .btn.danger{background:var(--bad-soft);color:var(--bad);box-shadow:none;}
+.btn.sec.on{background:var(--blue);color:#fff;border-color:var(--blue);
+  box-shadow:0 5px 12px -7px rgba(19,72,201,.9);}
 .btn[disabled]{opacity:.42;pointer-events:none;}
 .btn svg{width:19px;height:19px;flex:0 0 auto;}
 .btn.loading{pointer-events:none;}
@@ -453,6 +457,20 @@ details.sec[open] summary svg{transform:rotate(180deg);}
 .pick:active{transform:scale(.985);}
 .pick .nm{font-size:15px;font-weight:600;letter-spacing:-.01em;}
 .pick .mt{font-size:12.5px;color:var(--ink-3);margin-top:1px;}
+.pick.on{background:var(--blue-soft);box-shadow:inset 0 0 0 1.5px var(--blue-line);}
+.pick.on .nm{color:var(--blue-ink);}
+.pick.on svg{color:var(--blue);}
+/* the two quiet answers under the segments */
+.pillrow{display:flex;gap:var(--s2);margin-top:var(--s4);}
+.pill{display:flex;align-items:center;gap:7px;flex:1;min-width:0;min-height:44px;padding:0 12px;
+  border-radius:var(--r-sm);background:var(--surface-2);color:var(--ink-2);
+  font-size:13.5px;font-weight:600;letter-spacing:-.01em;transition:background .16s var(--ease);}
+.pill span{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pill svg{width:15px;height:15px;flex:0 0 15px;color:var(--ink-4);}
+.pill:active{background:var(--bg-2);}
+.whylist{margin:0;padding:0 0 0 20px;}
+.whylist li{font-size:15px;color:var(--ink);line-height:1.5;margin-bottom:10px;}
+.whylist li::marker{color:var(--blue);font-weight:600;}
 .deflist dt{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-top:var(--s4);}
 .deflist dd{margin:5px 0 0;font-size:15px;color:var(--ink-2);line-height:1.5;}
 
@@ -512,6 +530,8 @@ details.sec[open] summary svg{transform:rotate(180deg);}
 .listrow:last-child{border-bottom:none;}
 .listrow .k{font-size:15px;font-weight:500;}
 .listrow .v{font-size:14px;color:var(--ink-3);display:flex;align-items:center;gap:8px;}
+.listrow.stacked{display:block;}
+.listrow.stacked .v{display:block;margin-top:3px;color:var(--ink-2);}
 .listrow svg{width:17px;height:17px;color:var(--ink-4);}
 .photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s2);}
 .photo-grid figure{margin:0;position:relative;aspect-ratio:3/4;border-radius:var(--r-sm);overflow:hidden;background:var(--surface-2);}
@@ -921,7 +941,8 @@ const ICO={
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>',
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg>',
   up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14.5l6-6 6 6"/></svg>',
-  spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.8L18.5 10.5 13.7 12.2 12 17l-1.7-4.8L5.5 10.5l4.8-1.7z"/></svg>'
+  spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.8L18.5 10.5 13.7 12.2 12 17l-1.7-4.8L5.5 10.5l4.8-1.7z"/></svg>',
+  kit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="11" rx="2.5"/><path d="M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8"/></svg>'
 };
 function backBar(title,sub,target){
   return '<div class="topbar"><div class="row" style="gap:10px"><button class="xbtn" onclick="go(\''+target+'\')" aria-label="Back">'+ICO.back+
@@ -2040,13 +2061,19 @@ const DEMO_EXT=["jpg","webp","png","gif","mp4"];
 function slugOf(name){ return String(name).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
 function demoURL(name,i){ return "demos/"+slugOf(name)+"."+DEMO_EXT[i||0]; }
 function isVideo(url){ return /\.(mp4|webm|mov)(\?|$)/i.test(String(url||"")); }
+/* The order matters. A picture in the demos folder is hers, chosen for this
+   exercise, and beats the built-in animation, which lives on someone else's
+   server and can be slow or simply gone. Anything she pasted in herself wins
+   over both. */
 function mediaFor(name){
-  const o=(DB.media||{})[name]; if(o) return o;   /* one she pasted in herself */
-  const e=EX(name); if(e&&e.gif) return e.gif;    /* a built-in animation */
-  if(MEDIA_OK[name]) return demoURL(name,MEDIA_OK[name]);
-  if(DEMOS_PRESENT===false) return null;           /* no folder — don't ask */
-  return demoURL(name,0);                          /* the repo, if it's there */
+  const o=(DB.media||{})[name]; if(o) return o;          /* one she pasted in herself */
+  if(MEDIA_OK[name]!=null) return demoURL(name,MEDIA_OK[name]);  /* a file that proved itself */
+  if(DEMOS_PRESENT!==false) return demoURL(name,0);      /* her folder gets first refusal */
+  const e=EX(name); if(e&&e.gif) return e.gif;           /* then the built-in animation */
+  return null;
 }
+function builtInGif(name){ const e=EX(name); return (e&&e.gif)||null; }
+const TRY_GIF=98, TRY_FIXED=99;
 /* True only when we know for certain there is a picture. */
 function hasRealMedia(name){
   if((DB.media||{})[name]) return true;
@@ -2058,12 +2085,23 @@ const MEDIA_OK={};   /* filled in as files prove themselves */
    does, only the big card asks for a file, so an empty repo costs one request
    per screen rather than one per thumbnail. */
 let DEMOS_PRESENT=null;
+/* Is there a demos folder with anything in it? Ask for a handful of the most
+   common movements in every image format before deciding there is not — a
+   folder of webp, or one that simply hasn't got a hip thrust in it yet, is
+   still a folder. */
+const PROBE_NAMES=["Hip Thrust","Glute Bridge","Romanian Deadlift","Goblet Squat","Push-up","Plank"];
 function probeDemos(){
   try{
-    const img=new Image();
-    img.onload=()=>{ DEMOS_PRESENT=true; try{ refresh(); }catch(e){} };
-    img.onerror=()=>{ DEMOS_PRESENT=false; };
-    img.src=demoURL("Hip Thrust",0);
+    const tries=[];
+    PROBE_NAMES.forEach(n=>DEMO_EXT.forEach((x,i)=>{ if(i<4) tries.push(demoURL(n,i)); }));
+    let left=tries.length, found=false;
+    tries.forEach(src=>{
+      const img=new Image();
+      img.onload=()=>{ if(found) return; found=true; DEMOS_PRESENT=true; try{ refresh(); }catch(e){} };
+      img.onerror=()=>{ if(--left<=0 && !found) DEMOS_PRESENT=false; };
+      img.src=src;
+    });
+    if(!tries.length) DEMOS_PRESENT=false;
   }catch(e){ DEMOS_PRESENT=false; }
 }
 function mediaHTML(name,cls){
@@ -2080,15 +2118,23 @@ function mediaHTML(name,cls){
     return '<div class="media loading '+(cls||"")+'"><video src="'+esc(url)+'" autoplay muted loop playsinline '+
       'data-ex="'+esc(name)+'" data-try="99" onloadeddata="mediaOK(this)" onerror="mediaFailed(this)" '+
       'aria-label="'+esc(name)+' demonstration"></video></div>';
-  const known=(DB.media||{})[name]||(e.gif);
+  /* how we got this url decides what happens if it fails to load */
+  const t = (DB.media||{})[name] ? TRY_FIXED
+          : (MEDIA_OK[name]!=null) ? MEDIA_OK[name]
+          : (url===e.gif) ? TRY_GIF
+          : 0;
   return '<div class="media loading '+(cls||"")+'"><img src="'+esc(url)+'" alt="'+esc(name)+' demonstration"'+
-    (small?' loading="lazy"':'')+' data-ex="'+esc(name)+'" data-try="'+(known?99:0)+'" data-t="'+Date.now()+'" '+
+    (small?' loading="lazy"':'')+' data-ex="'+esc(name)+'" data-try="'+t+'" data-t="'+Date.now()+'" '+
     'onload="mediaOK(this)" onerror="mediaFailed(this)" /></div>';
 }
 function mediaOK(img){
   try{
     const box=img.parentNode; box.classList.remove("loading");
-    if(img.dataset.ex){ const t=+img.dataset.try; MEDIA_OK[img.dataset.ex]= (t>=0&&t<DEMO_EXT.length)? t : 0; DEMOS_PRESENT=true; }
+    if(img.dataset.ex){
+      const t=+img.dataset.try;
+      /* only a file from the demos folder proves the folder exists */
+      if(t>=0 && t<DEMO_EXT.length){ MEDIA_OK[img.dataset.ex]=t; DEMOS_PRESENT=true; }
+    }
     const frame=box.closest(".ec-media"); if(frame) frame.classList.remove("noshot");
   }catch(e){}
 }
@@ -2098,10 +2144,18 @@ function mediaFailed(node){
   try{
     const name=node.dataset.ex||"";
     const t=+node.dataset.try;
-    if(t<DEMO_EXT.length-1 && node.tagName==="IMG"){
+    /* walk the folder's formats first: jpg, webp, png, gif, mp4 */
+    if(t>=0 && t<DEMO_EXT.length-1 && node.tagName==="IMG"){
       node.dataset.try=String(t+1);
       node.dataset.t=String(Date.now());
       node.src=demoURL(name,t+1);
+      return;
+    }
+    /* nothing of hers — fall back to the built-in animation before giving up */
+    if(t!==TRY_GIF && node.tagName==="IMG" && builtInGif(name)){
+      node.dataset.try=String(TRY_GIF);
+      node.dataset.t=String(Date.now());
+      node.src=builtInGif(name);
       return;
     }
     const e=EX(name)||{};
@@ -2587,7 +2641,7 @@ function noteProgress(ex,kind){
    "Choose for me" uses the week. Anything else picks the day whose shape
    fits what she asked for, keeping the day's own warm-up and cool-down. */
 const FOCUS_DAY = { glutes:1, upper:2, legs:3, conditioning:4, core:5 };
-const FOCUS_LABEL = { auto:"Choose for me", glutes:"Glutes", upper:"Upper body",
+const FOCUS_LABEL = { auto:"Coach picks", glutes:"Glutes", upper:"Upper body",
                       legs:"Legs", core:"Core", mobility:"Mobility", conditioning:"Conditioning" };
 const MOBILITY_DAY = {
   key:"mob", tag:"Mobility", title:"Mobility & Breathing", focus:["mobility","deep-core"], kind:"mobility",
@@ -2742,20 +2796,30 @@ function blockedList(){ const b=coach().blocked||{}; return Object.keys(b).map(e
 function noteSkipped(ex){ exStat(ex).skipped++; save(); }
 function noteDone(ex){ exStat(ex).done++; save(); }
 
+function feedbackFor(date){ return (coach().feedback||[]).find(f=>f.date===date)||null; }
 function recordFeedback(w,fb){
   const c=coach();
-  const one=v=>v? (Array.isArray(v)?v:[v]) : [];
-  const rec={ date:w.date, effort:fb.effort||"right",
-              pain:one(fb.painEx||fb.pain), loved:one(fb.loved), disliked:one(fb.disliked) };
+  const one=v=>v? (Array.isArray(v)?v:[v]).filter(Boolean) : [];
+  /* answering again replaces the first answer rather than stacking on it */
+  const prev=feedbackFor(w.date);
+  if(prev){
+    (prev.loved||[]).forEach(ex=>{ const st=c.exStats[ex]; if(st) st.loved=Math.max(0,(st.loved||0)-1); });
+    (prev.disliked||[]).forEach(ex=>{ const st=c.exStats[ex]; if(st) st.disliked=Math.max(0,(st.disliked||0)-1); });
+    (prev.pain||[]).forEach(ex=>{ if(c.blocked[ex] && c.blocked[ex].from===w.date) delete c.blocked[ex]; });
+  }
+  const rec={ date:w.date, effort:fb.effort||(prev&&prev.effort)||"right",
+              pain:one(fb.painEx||fb.pain), loved:one(fb.loved), disliked:one(fb.disliked),
+              at:Date.now() };
   c.feedback=(c.feedback||[]).filter(f=>f.date!==w.date);
   c.feedback.push(rec);
   if(c.feedback.length>60) c.feedback=c.feedback.slice(-60);
   rec.loved.forEach(ex=>{ if(EX(ex)){ exStat(ex).loved++; DB.exPrefs[ex]={...(DB.exPrefs[ex]||{}),love:true}; } });
-  rec.disliked.forEach(ex=>{ if(!EX(ex)) return; const st=exStat(ex); st.disliked++; });
-  rec.pain.forEach(ex=>blockExercise(ex,"it hurt on "+uk(w.date)));
+  rec.disliked.forEach(ex=>{ if(EX(ex)) exStat(ex).disliked++; });
+  rec.pain.forEach(ex=>{ if(blockExercise(ex,"it hurt on "+uk(w.date))) c.blocked[ex].from=w.date; });
   save();
   return rec;
 }
+
 /* One short question, once, about the movement she keeps stepping past —
    rather than prescribing it again and again and hoping. */
 function skipQuestion(){
@@ -2774,6 +2838,7 @@ function answerSkip(ex,answer){
   else if(answer==="hate"){ exStat(ex).disliked+=2; }
   else if(answer==="hard"){ const e=EX(ex); if(e&&e.easier&&EX(e.easier)) DB.exPrefs[e.easier]={...(DB.exPrefs[e.easier]||{}),love:true}; exStat(ex).disliked++; }
   save(); closeSheet(); toast("Noted — you'll see less of it");
+  if(CUR==="train") renderTrain();
 }
 
 /* ---------- why this workout ----------
@@ -3230,7 +3295,11 @@ function swapItem(w,itemId,newEx,why){
       const old=b.items[i];
       const it=newItem({ex:newEx,reps:old.reps,time:old.time,side:old.side});
       it.id=old.id; it.swappedFrom=old.ex; if(why) it.why=why;
+      it.slot=old.slot; it.role=old.role; it.cat=old.cat;
       b.items[i]=it; w.edited=true;
+      /* she chose this one over the one on the screen — remember both */
+      if(why!=="neck" && why!=="pelvic"){ exStat(newEx).chosen=(exStat(newEx).chosen||0)+1;
+        exStat(old.ex).swappedOut=(exStat(old.ex).swappedOut||0)+1; }
       return it;
     }
   }
@@ -3342,6 +3411,8 @@ function replacementsFor(w,itemId,n){
     if(nm===it.ex||inSession.has(nm)) return false;
     const c=EX(nm); if(!c) return false;
     if(prefs[nm]&&prefs[nm].avoid) return false;
+    if(coach().blocked[nm]) return false;
+    if(UNAVAILABLE.test(nm)) return false;
     if(neck>=5 && (hasTag(nm,"overhead")||hasTag(nm,"neck-sensitive"))) return false;
     const m=c.m||[];
     return m.includes(target) || c.pat===pat;
@@ -3353,10 +3424,20 @@ function replacementsFor(w,itemId,n){
     if((DB.prefs.favourEquipment||[]).includes(c.eq)) s+=2;   /* bands, in her case */
     if(prefs[nm]&&prefs[nm].love) s+=3;
     if(mediaFor(nm)) s+=1;
+    const st=(coach().exStats||{})[nm]||{};
+    s += (st.chosen||0)*2 - (st.disliked||0)*3 - (st.swappedOut||0);
+    const ago=recentUse(nm);
+    if(ago!=null && ago<3) s-=6;               /* she did it in the last two days */
     if((c.tags||[]).includes("pelvic-safe")) s+=1;
     return {name:nm,score:s,why:whyReplacement(c,e,target)};
   }).sort((a,b)=>b.score-a.score);
   return scored.slice(0,n||3);
+}
+function recentUse(ex){
+  const h=history(ex);
+  if(!h.length) return null;
+  const last=h.map(e=>e.date).sort().slice(-1)[0];
+  return daysBetween(last,today());
 }
 function whyReplacement(c,e,target){
   const bits=[];
@@ -3992,7 +4073,7 @@ function importBackup(input){
 }
 
 /* =====================================================================
-   HOME — today first, then the week. The check-in is three taps unless
+   HOME — today first, then the week. The check-in is four taps unless
    she wants to say more.
    ===================================================================== */
 const WAVE = '<div class="wave" aria-hidden="true"><svg viewBox="0 0 400 96" preserveAspectRatio="none">'+
@@ -4023,7 +4104,9 @@ function ciDraft(){
   CI_DRAFT = saved? JSON.parse(JSON.stringify(saved)) : {
     id:uid(), date:d, sleep:6, energy:6, soreness:2, stress:3, neck:2, pain:0,
     cycleStatus:"none", cycleSymptoms:[], pelvic:[], time:"full",
-    duration:DB.prefs.lastDuration||"full", note:"", analysed:false
+    duration:DB.prefs.lastDuration||"full", note:"", analysed:false,
+    /* what she wants from today, and what she has to do it with */
+    focus:"auto", soreArea:"none", equip:null
   };
   return CI_DRAFT;
 }
@@ -4042,31 +4125,84 @@ function ciQuick(group,k,v,btn){
   CI_DRAFT=c;
 }
 
-/* ---------- the three-tap check-in ---------- */
+/* ---------- the quick check-in ----------
+   Four one-tap rows and two quiet pills. Every one of them changes what the
+   engine builds; nothing here is asked for the sake of asking. */
+const SORE_OPTS=[["No","none"],["Legs","legs"],["Upper","upper"]];
+const FOCUS_OPTS=["auto","glutes","upper","legs","core","mobility"];
+function focusLabel(k){ return FOCUS_LABEL[k]||k; }
+function equipSummary(c){
+  const list=(c&&Array.isArray(c.equip)&&c.equip.length)? c.equip : null;
+  if(!list || list.length>=ALL_EQUIP.length) return "All my kit";
+  if(list.length<=2) return list.map(e=>EQUIP_LABEL[e]||e).join(" + ");
+  return list.length+" pieces";
+}
 function quickCheckinHTML(){
   const c=ciDraft();
   const cyc=cycleInfo(today());
   const seg=(group,k,opts)=>'<div class="seg3" data-seg="'+group+'">'+opts.map(o=>
     '<button class="'+(c[k]===o[1]?"on":"")+'" onclick="ciQuick(\''+group+'\',\''+k+'\',\''+o[1]+'\',this)">'+o[0]+'</button>').join("")+'</div>';
-  const energySeg='<div class="seg3" data-seg="en">'+[["Low",3],["Okay",6],["Good",9]].map(o=>
-    '<button class="'+(c.energy===o[1]?"on":"")+'" onclick="ciQuick(\'en\',\'energy\','+o[1]+',this)">'+o[0]+'</button>').join("")+'</div>';
-  const neckSeg='<div class="seg3" data-seg="nk">'+[["Fine",1],["Tight",5],["Sore",8]].map(o=>
-    '<button class="'+(c.neck===o[1]?"on":"")+'" onclick="ciQuick(\'nk\',\'neck\','+o[1]+',this)">'+o[0]+'</button>').join("")+'</div>';
+  const numSeg=(group,k,opts)=>'<div class="seg3" data-seg="'+group+'">'+opts.map(o=>
+    '<button class="'+(c[k]===o[1]?"on":"")+'" onclick="ciQuick(\''+group+'\',\''+k+'\','+o[1]+',this)">'+o[0]+'</button>').join("")+'</div>';
   return '<div class="card pad-lg">'+
     '<div class="spread" style="margin-bottom:4px">'+
       '<div><div class="eyebrow">Before you train</div>'+
-      '<h2 style="margin-top:4px;font-size:21px">Three taps</h2></div>'+
+      '<h2 style="margin-top:4px;font-size:21px">Quick check</h2></div>'+
       (cyc.known&&DB.prefs.cycleOn? '<button class="chip rose" onclick="go(\'cycle\')">'+
         (cyc.bleeding?"Day "+cyc.day:PHASE_LABEL[cyc.phase])+'</button>':'')+
     '</div>'+
-    '<div class="qrow"><span class="ql">Energy</span>'+energySeg+'</div>'+
-    '<div class="qrow"><span class="ql">Neck</span>'+neckSeg+'</div>'+
+    '<div class="qrow"><span class="ql">Energy</span>'+numSeg("en","energy",[["Low",3],["Okay",6],["Good",9]])+'</div>'+
+    '<div class="qrow"><span class="ql">Neck</span>'+numSeg("nk","neck",[["Fine",1],["Tight",5],["Sore",8]])+'</div>'+
+    '<div class="qrow"><span class="ql">Sore</span>'+seg("so","soreArea",SORE_OPTS)+'</div>'+
     '<div class="qrow"><span class="ql">Time</span>'+
       seg("dur","duration",[["Quick","quick"],["Standard","standard"],["Full","full"]])+'</div>'+
-    '<button class="btn big" style="margin-top:18px" id="analyseBtn" onclick="runAnalysis()">'+
+    '<div class="pillrow">'+
+      '<button class="pill" onclick="openFocusPick()">'+ICO.spark+'<span>'+esc(focusLabel(c.focus||"auto"))+'</span></button>'+
+      '<button class="pill" onclick="openEquipPick()">'+ICO.kit+'<span>'+esc(equipSummary(c))+'</span></button>'+
+    '</div>'+
+    '<button class="btn big" style="margin-top:16px" id="analyseBtn" onclick="runAnalysis()">'+
       '<span class="lbl">Analyse my day</span></button>'+
-    '<button class="linkbtn" style="display:block;margin:12px auto 0" onclick="openFullCheckin()">Say more</button>'+
+    '<button class="linkbtn" style="display:flex;margin:10px auto 0" onclick="openFullCheckin()">Say more</button>'+
   '</div>';
+}
+/* What she wants from today. "Choose for me" is the default and the honest
+   answer most days — the week already knows. */
+function openFocusPick(){
+  const c=ciDraft();
+  openSheet("What do you want today?",
+    FOCUS_OPTS.map(k=>'<button class="pick'+(c.focus===k?" on":"")+'" onclick="setFocus(\''+k+'\')">'+
+      '<span class="grow"><span class="nm">'+esc(focusLabel(k))+'</span>'+
+      '<span class="mt">'+esc(FOCUS_WHY[k]||"")+'</span></span>'+
+      (c.focus===k?ICO.check:ICO.chev)+'</button>').join("")+
+    '<p class="tiny dim" style="margin-top:10px">This only changes today.</p>');
+}
+const FOCUS_WHY={
+  auto:"Choose for me — follow the week and the history",
+  glutes:"Glutes and hamstrings",
+  upper:"Back, posture and the upper body",
+  legs:"Quads, glutes and single-leg work",
+  core:"Trunk, pelvic floor and stability",
+  mobility:"Breathing and mobility only — no loading"
+};
+function setFocus(k){ const c=ciDraft(); c.focus=k; CI_DRAFT=c; closeSheet(); renderHome(); }
+/* Her kit, for today only. Unticking the rack does not remove anything from
+   the programme — it just keeps today buildable. */
+function openEquipPick(){
+  const c=ciDraft();
+  const cur=new Set((Array.isArray(c.equip)&&c.equip.length)? c.equip : ALL_EQUIP);
+  openSheet("What have you got today?",
+    '<div style="margin-bottom:6px">'+ALL_EQUIP.filter(e=>e!=="bw").map(e=>
+      '<button class="chip '+(cur.has(e)?"blue":"")+'" style="margin:0 6px 8px 0" data-eq="'+e+'" '+
+      'onclick="this.classList.toggle(\'blue\')">'+esc(EQUIP_LABEL[e]||e)+'</button>').join("")+'</div>'+
+    '<p class="tiny dim">Your body is always on the list. Untick anything the session should avoid today.</p>'+
+    '<div class="btn-row" style="margin-top:18px">'+
+      '<button class="btn sec" onclick="saveEquip(true)"><span class="lbl">All my kit</span></button>'+
+      '<button class="btn" onclick="saveEquip(false)"><span class="lbl">Done</span></button></div>');
+}
+function saveEquip(all){
+  const c=ciDraft();
+  c.equip = all? null : ["bw", ...[...document.querySelectorAll("[data-eq].blue")].map(b=>b.dataset.eq)];
+  CI_DRAFT=c; closeSheet(); renderHome();
 }
 
 /* ---------- the full check-in, when she wants it ---------- */
@@ -4217,6 +4353,7 @@ function todayCardHTML(){
       '<span class="chip">'+plural((w.blocks||[]).length,"block")+'</span>'+
       (total? '<span class="chip">'+done+'/'+total+' sets</span>':'')+
       ((ci&&+ci.neck>=4)? '<span class="chip warn">Neck '+ci.neck+'</span>':'')+
+      '<button class="chip blue" onclick="whySheet()">'+ICO.info+'Why this?</button>'+
     '</div>'+
     '<button class="btn big" style="margin-top:18px" onclick="go(\'train\')">'+
       (finished?'':ICO.play)+'<span class="lbl">'+(finished?"Review the session":started?"Continue workout":"Start workout")+'</span></button>'+
@@ -4650,10 +4787,34 @@ function doDiscardDay(date){
   closeSheet(); refresh();
   toast(uk(date)+" deleted");
 }
+
+/* ---------- why this workout ----------
+   Three reasons at most, every one of them from something she actually did.
+   If the engine cannot say why, it says so rather than inventing a reason. */
+function whySheet(date){
+  const w=sessionFor(date||today(),true);
+  if(!w || w.rest){ openSheet("Why this workout?","<p class=\"muted\">Today is a scheduled rest day.</p>"); return; }
+  const why=(w.why||[]);
+  const anchors=(w.blocks||[]).flatMap(b=>b.items).filter(i=>i.role==="anchor");
+  openSheet("Why this workout?",
+    (why.length
+      ? '<ol class="whylist">'+why.map(t=>'<li>'+esc(t)+'</li>').join("")+'</ol>'
+      : '<p class="muted">This one came straight from the programme — nothing in your check-in changed it.</p>')+
+    '<div class="hair"></div>'+
+    '<div class="listrow"><span class="k">Block week</span><span class="v num">'+(w.blockWeek||1)+' of 4</span></div>'+
+    '<div class="listrow"><span class="k">Length</span><span class="v num">'+w.mins+' min</span></div>'+
+    (anchors.length? '<div class="listrow stacked"><span class="k">Held for progress</span>'+
+      '<span class="v">'+esc(anchors.map(a=>a.ex).join(", "))+'</span></div>':'')+
+    ((w.adjustments||[]).length? '<div class="eyebrow" style="margin:18px 0 8px">From your check-in</div>'+
+      (w.adjustments||[]).map(a=>'<p class="muted small" style="margin-bottom:6px">'+esc(a)+'</p>').join(""):'')+
+    '<button class="btn ghost sm" style="margin-top:18px" onclick="closeSheet();rebuildWorkout()">'+
+      '<span class="lbl">Build me a different one</span></button>');
+}
 function rebuildWorkout(){
   const d=today();
   const prev=DB.sessions[d];
-  UNDO={label:"rebuild", session:prev?JSON.parse(JSON.stringify(prev)):null};
+  UNDO=snapshotFor(d); UNDO.label="rebuild";
+  coach().nonce=(coach().nonce||0)+1;   /* ask again and you get a different answer */
   regenerate(d,(prev&&prev.duration)||DB.prefs.lastDuration||"full");
   const ci=checkinOn(d);
   if(ci&&ci.analysed) applyCheckin(DB.sessions[d],ci);
@@ -4879,8 +5040,9 @@ function readyHTML(w){
       '<div class="row" style="gap:8px;flex-wrap:wrap;margin:18px 0 16px">'+
         '<span class="chip blue">about '+w.mins+' min</span>'+
         '<span class="chip">'+plural((w.blocks||[]).length,"block")+'</span>'+
-        '<span class="chip">'+((w.prep||[]).length)+' warm-up</span>'+
+        '<span class="chip">'+plural((w.prep||[]).length,"warm-up move")+'</span>'+
         (w.adjustments&&w.adjustments.length?'<span class="chip warn">adjusted</span>':'')+
+        '<button class="chip blue" onclick="whySheet()">'+ICO.info+'Why this?</button>'+
       '</div>'+
       '<button class="btn big" onclick="startWorkout()">'+ICO.play+
         '<span class="lbl">'+((w.prep||[]).length?"Start with the warm-up":"Start workout")+'</span></button>'+
@@ -5110,11 +5272,104 @@ function coolHTML(w){
     '<button class="btn ghost sm" style="margin-top:10px" onclick="openCooldownPrefs()"><span class="lbl">Change hold length</span></button>'+
   '</div>';
 }
+/* ---------- the three questions at the end ----------
+   Asked once, in order, and only the first is compulsory. Every answer goes
+   straight into what gets built next time. */
+let FB_STEP = null;
+function fbCard(w){
+  const fb=feedbackFor(w.date);
+  if(fb && FB_STEP!=="open"){
+    const bits=[EFFORT_LABEL[fb.effort]||"Logged"];
+    if(fb.pain.length) bits.push("pain on "+fb.pain.join(", "));
+    if(fb.loved.length) bits.push("liked "+fb.loved.join(", "));
+    if(fb.disliked.length) bits.push("disliked "+fb.disliked.join(", "));
+    return '<div class="card tight" style="margin-bottom:14px">'+
+      '<div class="spread"><span class="grow"><span class="eyebrow">Your feedback</span>'+
+      '<div class="small muted" style="margin-top:3px">'+esc(bits.join(" · "))+'</div></span>'+
+      '<button class="chip" onclick="FB_STEP=\'open\';renderTrain()">Change</button></div></div>';
+  }
+  const step = FB_STEP || (fb? "open" : "effort");
+  const eff=k=>'<button class="btn sec sm'+((fb&&fb.effort===k)?" on":"")+'" onclick="fbEffort(\''+k+'\')">'+
+    '<span class="lbl">'+EFFORT_LABEL[k]+'</span></button>';
+  let body='<div class="eyebrow">How did that feel?</div>'+
+    '<div class="btn-row" style="margin-top:10px">'+eff("easy")+eff("right")+eff("hard")+'</div>';
+  if(step!=="effort"){
+    body+='<div class="hair"></div><div class="eyebrow">Anything hurt?</div>'+
+      '<div class="btn-row" style="margin-top:10px">'+
+        '<button class="btn sec sm" onclick="fbNoPain()"><span class="lbl">No</span></button>'+
+        '<button class="btn sec sm" onclick="fbPick(\'pain\')"><span class="lbl">Yes — which?</span></button>'+
+      '</div>';
+  }
+  if(step==="extras"||step==="open"){
+    body+='<div class="hair"></div><div class="eyebrow">Anything stand out? <span class="dim">optional</span></div>'+
+      '<div class="btn-row" style="margin-top:10px">'+
+        '<button class="btn ghost sm" onclick="fbPick(\'loved\')"><span class="lbl">Best move</span></button>'+
+        '<button class="btn ghost sm" onclick="fbPick(\'disliked\')"><span class="lbl">Worst move</span></button>'+
+      '</div>'+
+      '<button class="btn quiet sm" style="margin-top:12px" onclick="fbClose()"><span class="lbl">Done</span></button>';
+  }
+  return '<div class="card pad-lg" style="margin-bottom:14px">'+body+'</div>';
+}
+const EFFORT_LABEL={easy:"Too easy",right:"Just right",hard:"Too hard"};
+function fbEffort(k){
+  const w=W(); recordFeedback(w,{effort:k, loved:(feedbackFor(w.date)||{}).loved, disliked:(feedbackFor(w.date)||{}).disliked, pain:(feedbackFor(w.date)||{}).pain});
+  FB_STEP = FB_STEP==="open"? "open" : "pain";
+  renderTrain();
+  toast(k==="easy"?"Noted — next one steps up":k==="hard"?"Noted — next one eases off":"Noted");
+}
+function fbNoPain(){
+  const w=W(); const cur=feedbackFor(w.date)||{};
+  recordFeedback(w,{effort:cur.effort, loved:cur.loved, disliked:cur.disliked, pain:[]});
+  FB_STEP = FB_STEP==="open"? "open" : "extras";
+  renderTrain();
+}
+function fbPick(kind){
+  const w=W();
+  const names=[...new Set((w.blocks||[]).flatMap(b=>b.items.map(i=>i.ex)))];
+  const title = kind==="pain"? "What hurt?" : kind==="loved"? "Best move today" : "Least favourite today";
+  const note  = kind==="pain"
+    ? "It comes out of the programme until you put it back. This is not a diagnosis — if it keeps hurting, get it looked at."
+    : kind==="loved"? "You'll see more of it." : "You'll see less of it.";
+  openSheet(title,
+    '<p class="muted small" style="margin-bottom:14px">'+esc(note)+'</p>'+
+    names.map(n=>'<button class="pick" onclick="fbSet(\''+kind+'\',\''+esc(n).replace(/'/g,"\\'")+'\')">'+
+      '<span class="grow"><span class="nm">'+esc(n)+'</span>'+
+      '<span class="mt">'+esc(catLabel(catOf(n)))+'</span></span>'+ICO.chev+'</button>').join("")+
+    '<button class="btn ghost sm" style="margin-top:12px" onclick="closeSheet()"><span class="lbl">Never mind</span></button>');
+}
+function fbSet(kind,ex){
+  const w=W(); const cur=feedbackFor(w.date)||{};
+  const next={effort:cur.effort, pain:cur.pain||[], loved:cur.loved||[], disliked:cur.disliked||[]};
+  if(kind==="pain") next.pain=[...new Set([...(next.pain||[]),ex])];
+  if(kind==="loved") next.loved=[...new Set([...(next.loved||[]),ex])];
+  if(kind==="disliked") next.disliked=[...new Set([...(next.disliked||[]),ex])];
+  recordFeedback(w,next);
+  if(FB_STEP!=="open") FB_STEP="extras";
+  closeSheet(); renderTrain();
+  toast(kind==="pain"? ex+" is out until you put it back" : "Noted");
+}
+function fbClose(){ FB_STEP=null; renderTrain(); }
+/* The one question about a movement she keeps stepping past. */
+function askSkipHTML(){
+  const ex=skipQuestion();
+  if(!ex) return '';
+  return '<div class="card tight" style="margin-bottom:14px">'+
+    '<div class="eyebrow">One question</div>'+
+    '<p style="margin:6px 0 12px">You\'ve skipped <b>'+esc(ex)+'</b> a few times. Why?</p>'+
+    '<div class="btn-row">'+
+      '<button class="btn sec sm" onclick="answerSkip(\''+esc(ex).replace(/'/g,"\\'")+'\',\'hard\')"><span class="lbl">Too hard</span></button>'+
+      '<button class="btn sec sm" onclick="answerSkip(\''+esc(ex).replace(/'/g,"\\'")+'\',\'hate\')"><span class="lbl">Don\'t like it</span></button>'+
+      '<button class="btn sec sm" onclick="answerSkip(\''+esc(ex).replace(/'/g,"\\'")+'\',\'hurts\')"><span class="lbl">It hurts</span></button>'+
+    '</div></div>';
+}
+
 function finishedHTML(w){
   const {done,total}=sessionSetsDone(w);
   const prs=(DB.prs||[]).filter(p=>p.date===w.date);
   const mins=Math.max(1,Math.round((w.elapsedMs||sessionElapsed(w))/60000));
-  return trainHead("Session complete", esc(w.title))+
+  return trainHead("Session complete", w.title)+
+    fbCard(w)+
+    askSkipHTML()+
     '<div class="hero" style="margin-bottom:14px">'+WAVE+
       '<div class="statgrid">'+
         '<div class="stat"><div class="k">Sets logged</div><div class="v num">'+done+' <small>/ '+total+'</small></div></div>'+
@@ -5145,18 +5400,32 @@ function swapSections(w,id){
   const it=f.item, e=EX(it.ex)||{};
   const all=replacementsFor(w,id,40);
   const byName=n=>all.find(o=>o.name===n);
-  const out=[], used=new Set();
-  const push=(title,list)=>{
-    const items=list.filter(o=>o&&!used.has(o.name)).slice(0,3);
-    items.forEach(o=>used.add(o.name));
-    if(items.length) out.push({title,items});
+  const used=new Set(), out=[];
+  const take=(title,list,fallbackWhy)=>{
+    const o=list.filter(x=>x && EX(x.name||x) && !used.has(x.name||x))[0];
+    if(!o) return;
+    const name=o.name||o;
+    used.add(name);
+    out.push({title, items:[{name, why:(o.why)||fallbackWhy}]});
   };
-  push("Recommended", all.slice(0,3));
-  const easier=[e.easier].filter(n=>n&&EX(n)).map(n=>byName(n)||{name:n,why:"an easier version"});
-  push("Easier", easier);
-  const harder=[e.harder].filter(n=>n&&EX(n)).map(n=>byName(n)||{name:n,why:"a harder version"});
-  push("Harder", harder);
-  push("Same muscle, different kit", all.filter(o=>EX(o.name).eq!==e.eq));
+  /* the three she actually wants: kinder, the same, or with other kit */
+  take("Easier",
+    [e.easier&&{name:e.easier,why:"a kinder version of the same movement"},
+     ...all.filter(o=>(EX(o.name)||{}).easier===it.ex).map(o=>({...o,why:"a step below"}))],
+    "a step below");
+  take("Same level",
+    all.filter(o=>(EX(o.name)||{}).pat===e.pat),
+    "same pattern, same muscle");
+  take("Different kit",
+    all.filter(o=>(EX(o.name)||{}).eq!==e.eq),
+    "same job, other equipment");
+  /* and the rest, for when none of those is right */
+  const more=all.filter(o=>!used.has(o.name)).slice(0,3);
+  if(e.harder && EX(e.harder) && !used.has(e.harder)){
+    out.push({title:"Harder", items:[{name:e.harder, why:"a step up when you are ready"}]});
+    used.add(e.harder);
+  }
+  if(more.length) out.push({title:"Others that fit", items:more.filter(o=>!used.has(o.name)).slice(0,3)});
   return out;
 }
 function openReplace(id){
@@ -5956,6 +6225,96 @@ function saveProfile(){
 }
 
 /* ---------- settings ---------- */
+/* A movement paused after a pain report stays paused until she says
+   otherwise. Nothing here decides anything medical; it only stops the engine
+   prescribing something that hurt. */
+function openHold(){
+  const list=blockedList();
+  openSheet("Movements on hold",
+    (list.length
+      ? list.map(b=>'<div class="listrow stacked"><span class="spread"><span class="k">'+esc(b.ex)+'</span>'+
+          '<button class="chip blue" onclick="allowAgain(\''+esc(b.ex).replace(/'/g,"\\'")+'\')">Allow again</button></span>'+
+          '<span class="v">'+esc(b.why||"paused")+'</span></div>').join("")
+      : '<p class="muted">Nothing is on hold. When you report pain on a movement at the end of a session it appears here until you put it back.</p>')+
+    '<p class="tiny dim" style="margin-top:16px">If something keeps hurting, get it assessed properly. This app pauses movements; it does not diagnose anything.</p>');
+}
+function allowAgain(ex){ unblockExercise(ex); openHold(); renderSettings(); toast(ex+" is back in the programme"); }
+function openPrefsList(){
+  const p=DB.exPrefs||{};
+  const names=Object.keys(p).filter(n=>EX(n));
+  const st=n=>(coach().exStats||{})[n]||{};
+  openSheet("Likes and avoids",
+    (names.length
+      ? names.map(n=>'<div class="listrow"><span class="grow"><span class="k">'+esc(n)+'</span>'+
+          '<div class="tiny dim">'+(p[n].avoid?"never again":p[n].love?"more of this":"noted")+
+          ((st(n).disliked||0)?" · disliked "+plural(st(n).disliked,"time"):"")+
+          ((st(n).skipped||0)?" · skipped "+plural(st(n).skipped,"time"):"")+'</div></span>'+
+          '<button class="chip" onclick="clearPref(\''+esc(n).replace(/'/g,"\\'")+'\')">Clear</button></div>').join("")
+      : '<p class="muted">Nothing yet. Tell the coach at the end of a session which movement you liked and which you did not, and they collect here.</p>'));
+}
+function clearPref(n){ delete DB.exPrefs[n]; if(coach().exStats[n]) coach().exStats[n].disliked=0; save(); openPrefsList(); renderSettings(); }
+function restartBlock(){
+  openSheet("Restart the block?",
+    '<p class="muted">The four-week cycle starts again at week one: the baseline week, and the main lifts are chosen fresh. '+
+    'Your history, records and preferences are untouched.</p>'+
+    '<button class="btn" style="margin-top:20px" onclick="doRestartBlock()"><span class="lbl">Start a new block</span></button>'+
+    '<button class="btn ghost" style="margin-top:10px" onclick="closeSheet()"><span class="lbl">Leave it</span></button>');
+}
+function doRestartBlock(){
+  const c=coach();
+  c.blockStart=weekStart(today());
+  c.anchors={};
+  c.nonce=(c.nonce||0)+1;
+  save(); closeSheet(); rebuildWorkout(); renderSettings();
+  toast("New block — week one");
+}
+
+/* ---------- which movements still need a picture ----------
+   Asked for on purpose, never on a page load: it walks the whole catalogue
+   against the demos folder and says exactly which filenames are missing. */
+let _mediaScan=false;
+function probeOne(name){
+  return new Promise(res=>{
+    let i=0;
+    const next=()=>{
+      if(i>=4) return res(false);
+      const img=new Image();
+      img.onload=()=>{ MEDIA_OK[name]=i; DEMOS_PRESENT=true; res(true); };
+      img.onerror=()=>{ i++; next(); };
+      img.src=demoURL(name,i);
+    };
+    next();
+  });
+}
+async function checkMedia(){
+  if(_mediaScan) return;
+  _mediaScan=true;
+  const names=EX_NAMES.slice();
+  const msg=el("mediaMsg");
+  const paint=t=>{ if(el("mediaMsg")) el("mediaMsg").textContent=t; };
+  paint("Checking "+names.length+" movements…");
+  const have=[], missing=[];
+  for(let i=0;i<names.length;i+=8){
+    const batch=names.slice(i,i+8);
+    const got=await Promise.all(batch.map(probeOne));
+    batch.forEach((n,j)=>(got[j]?have:missing).push(n));
+    paint("Checking… "+Math.min(i+8,names.length)+" of "+names.length);
+  }
+  _mediaScan=false;
+  DB.mediaScan={at:Date.now(), have:have.length, total:names.length};
+  save();
+  paint(have.length+" of "+names.length+" have a picture.");
+  openSheet("Demonstration pictures",
+    '<p class="muted"><b>'+have.length+'</b> of '+names.length+' movements have a picture in the demos folder. '+
+    (missing.length? 'The rest fall back to the built-in animation or a labelled body map — nothing breaks.' : 'Every one of them is covered.')+'</p>'+
+    (missing.length? '<div class="eyebrow" style="margin:18px 0 8px">Still missing ('+missing.length+')</div>'+
+      '<p class="tiny dim" style="margin-bottom:10px">Filenames, ready for the folder. Any of jpg, webp, png, gif or mp4.</p>'+
+      '<textarea class="txtin" rows="8" readonly style="font-size:12px">'+
+        esc(missing.map(n=>slugOf(n)+".jpg").join("\n"))+'</textarea>' : '')+
+    '<button class="btn sec" style="margin-top:14px" onclick="closeSheet();refresh()"><span class="lbl">Done</span></button>');
+  refresh();
+}
+
 function renderSettings(){
   const sw=(id,on,fn)=>'<span class="switch '+(on?"on":"")+'" id="'+id+'" onclick="'+fn+'"></span>';
   el("setWrap").innerHTML=backBar("Settings","","more")+
@@ -5987,6 +6346,22 @@ function renderSettings(){
       '<div class="listrow"><span class="grow"><span class="k">Rebuild today\'s session</span>'+
         '<div class="tiny dim">Start it again from the programme</div></span>'+
         '<button class="chip" onclick="rebuildWorkout()">Rebuild</button></div>'+
+    '</div>'+
+    '<div class="card"><div class="eyebrow" style="margin-bottom:14px">Programme</div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Block week</span>'+
+        '<div class="tiny dim">Week '+blockWeek(today())+' of 4 · '+esc(BLOCK_NOTE[blockWeek(today())].split(" — ")[1]||"")+'</div></span>'+
+        '<button class="chip" onclick="restartBlock()">Restart</button></div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Movements on hold</span>'+
+        '<div class="tiny dim">'+(blockedList().length? plural(blockedList().length,"movement")+" paused after a pain report" : "Nothing is paused")+'</div></span>'+
+        '<button class="chip" onclick="openHold()">'+(blockedList().length?"Review":"None")+'</button></div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Demonstration pictures</span>'+
+        '<div class="tiny dim" id="mediaMsg">'+(DB.mediaScan
+          ? DB.mediaScan.have+" of "+DB.mediaScan.total+" have a picture"
+          : "Drop them in the demos folder, named after the movement")+'</div></span>'+
+        '<button class="chip" onclick="checkMedia()">Check</button></div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Movements she likes and avoids</span>'+
+        '<div class="tiny dim">'+plural(Object.keys(DB.exPrefs||{}).length,"movement")+' with a preference</div></span>'+
+        '<button class="chip" onclick="openPrefsList()">Review</button></div>'+
     '</div>'+
     '<div class="card"><div class="eyebrow" style="margin-bottom:14px">Backup and sync</div>'+
       '<div class="listrow"><span class="k">Cloud backup</span>'+sw("swCloud",DB.cloud.on,"toggleCloudOn(this)")+'</div>'+
