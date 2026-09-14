@@ -386,6 +386,10 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 .sidetag{font-size:13px;font-weight:500;color:var(--ink-3);letter-spacing:0;vertical-align:4px;}
 .ec-sub{font-size:16px;color:var(--ink-2);margin-top:7px;line-height:1.4;}
 .ec-prev{font-size:13.5px;color:var(--ink-3);margin-top:8px;}
+/* what today is trying to beat */
+.target{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:13.5px;font-weight:600;
+  color:var(--good);background:var(--good-soft);border-radius:var(--r-sm);padding:9px 12px;}
+.target svg{width:15px;height:15px;flex:0 0 15px;}
 .restrow{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:var(--s4);color:var(--ink-2);}
 .restrow svg{width:19px;height:19px;color:var(--ink-3);flex:0 0 auto;}
 .restrow .t{font-size:15.5px;font-weight:600;letter-spacing:-.01em;}
@@ -809,6 +813,8 @@ const DEFAULTS = {
        not a full rest — that is the whole point of pairing them. */
     rest: { superset:20, round:75, block:100, straight:75 },
     sound:true, vibrate:true, cycleOn:true, coachTone:"warm",
+    /* how much of the programme is held still so it can be built on */
+    build:"balanced",
     cooldownSec:40,
     /* The three buttons on the duration picker, and the one she used last. */
     durations:{ quick:20, standard:40, full:60 },
@@ -2573,6 +2579,19 @@ function catLabel(c){ return (CATS[c]||{}).label || c; }
 /* Loadable means we can measure progress on it. Those are the movements
    worth holding for several weeks; everything else rotates. */
 function isLoadable(ex){ const e=EX(ex)||{}; return e.load==="kg" || e.load==="band"; }
+/* ---------- variety against strength ----------
+   She wants both: different sessions, and numbers that go up. One control
+   decides how much of the programme is held still so it can be built on,
+   and how hard everything else rotates. */
+const BUILD_MODES = {
+  variety:  {label:"More variety",   anchors:1, holdDays:14, rotate:1.45, blockB:false,
+             note:"Almost everything changes. One lift is held so there is still something to measure."},
+  balanced: {label:"Balanced",       anchors:2, holdDays:28, rotate:1,    blockB:false,
+             note:"The two main lifts are held for the four-week block and built on. Everything else rotates."},
+  strength: {label:"Build strength", anchors:4, holdDays:56, rotate:0.5,  blockB:true,
+             note:"The main lifts in blocks A and B are held for eight weeks and driven up. Everything else still varies, just less often."}
+};
+function buildMode(){ return BUILD_MODES[(DB.prefs&&DB.prefs.build)] || BUILD_MODES.balanced; }
 /* The catalogue grades itself: every movement names an easier and a harder
    version. Anything that other movements point to as "harder", and that has
    no harder version of its own, is the top of its chain. */
@@ -2678,7 +2697,8 @@ function jitter(seed){ return (hash32(seed)%1000)/1000; }
    role. Block A's loaded work is anchored and held; the rest rotates. */
 function slotsFor(plan,variant){
   const src = plan[variant] || plan.full;
-  let anchorsLeft = 2;
+  const bm=buildMode();
+  let anchorsLeft = bm.anchors;
   return src.map((b,bi)=>({
     label:b.label, rounds:b.rounds, rest:b.rest, flow:!!b.flow, straight:!!b.straight,
     items: b.items.map((it,ii)=>({
@@ -2690,7 +2710,8 @@ function slotsFor(plan,variant){
       pat: (EX(it.ex)||{}).pat,
       loaded: isLoadable(it.ex),
       timed: !!it.time,
-      role: (bi===0 && isLoadable(it.ex) && !b.flow && anchorsLeft-- > 0) ? "anchor" : "accessory",
+      role: ((bi===0 || (bm.blockB && bi===1)) && isLoadable(it.ex) && !b.flow && anchorsLeft-- > 0)
+              ? "anchor" : "accessory",
       reps: it.reps!=null? it.reps : null,
       time: it.time||null,
       side: !!it.side
@@ -2767,17 +2788,18 @@ function scoreCandidate(nm,slot,ctx){
   if(e.pat===slot.pat) s+=12;
   if(nm===slot.seed) s += slot.role==="anchor"? 22 : 4;
   if(ctx.week===1 && nm===slot.seed) s+=10;      /* week one is the baseline */
+  const rot=buildMode().rotate;
   const last=ctx.usage[nm];
-  if(!last) s+=8;
+  if(!last) s += 8*rot;
   else {
     const ago=daysBetween(last,ctx.date);
-    s += Math.min(ago,60)/4;
-    if(ago<14) s -= (14-ago)*2.5;                /* seen this fortnight — let it rest */
+    s += Math.min(ago,60)/4*rot;
+    if(ago<14) s -= (14-ago)*2.5*rot;            /* seen this fortnight — let it rest */
   }
   const shown=ctx.shown[nm];
   if(shown){
     const sAgo=daysBetween(shown,ctx.date);
-    if(sAgo<14) s -= (14-sAgo)*1.5;            /* she has seen it lately, done or not */
+    if(sAgo<14) s -= (14-sAgo)*1.5*rot;        /* she has seen it lately, done or not */
   }
   if(ctx.recent2.has(nm)) s-=50;
   if(ctx.prevSet.has(nm)) s-=25;
@@ -2792,6 +2814,10 @@ function scoreCandidate(nm,slot,ctx){
   s += (st.loved||0)*5 - (st.disliked||0)*6 - Math.max(0,(st.skipped||0)-(st.done||0))*8;
   s -= (st.inDisliked||0)*2;                   /* it was in a session she thumbed down */
   if((ctx.prefs[nm]||{}).love) s+=5;
+  /* something she already has numbers on is worth more than a fresh face
+     when the point is to get stronger */
+  const done=(c.exStats[nm]||{}).done||0;
+  if(done) s += Math.min(done,6)*(2/Math.max(rot,0.4));
   if((DB.prefs.favourEquipment||[]).includes(e.eq)) s+=4;
   if(hasRealMedia(nm)) s+=3;
   if(ctx.pelvic && (e.tags||[]).includes("pelvic-safe")) s+=4;
@@ -3166,7 +3192,7 @@ function favouriteFor(dateISO,plan){
   const c=coach();
   const f=c.favourites[plan&&plan.key];
   if(!f) return null;
-  if(daysBetween(f.since,dateISO)>=28){ delete c.favourites[plan.key]; return null; }
+  if(daysBetween(f.since,dateISO)>=buildMode().holdDays){ delete c.favourites[plan.key]; return null; }
   if(daysBetween(f.liked,dateISO)<1) return null;   /* not on the day she liked it */
   return f;
 }
@@ -3286,12 +3312,43 @@ function bestEver(ex){
 
 /* Suggested load. It is a SUGGESTION. Nothing here ever raises the
    prescribed weight on its own — Lia confirms every increase. */
+/* ---------- carrying strength across a rotation ----------
+   Rotation is worth nothing if every new movement starts from a generic
+   table. When she has never done this one, look at what she is lifting on
+   its close relatives — the same movement pattern with the same equipment —
+   and start there instead, adjusted for one leg or two. */
+function relatedLoad(ex,dateISO){
+  const e=EX(ex); if(!e||e.load!=="kg") return null;
+  const d=dateISO||today();
+  let best=null;
+  EX_NAMES.forEach(nm=>{
+    if(nm===ex) return;
+    const c=EXDB[nm];
+    /* the same pattern at the same station is comparable; across equipment
+       it is not, and guessing there would put a barbell number on a dumbbell */
+    if(c.pat!==e.pat || c.eq!==e.eq || c.load!=="kg") return;
+    const prev=lastBefore(nm,d); const t=topSet(prev);
+    if(!t||!t.w) return;
+    if(!best || prev.date>best.date) best={from:nm, kg:t.w, reps:t.r, date:prev.date};
+  });
+  if(!best) return null;
+  /* The number she logs is the weight on the implement, not the total work,
+     so a one-arm row and a two-arm row start from the same dumbbell. Carry it
+     across unchanged — but a step down if the new movement is the harder
+     version of the one she has been doing. */
+  /* Her own logged number is already a weight that exists in the room, so it
+     carries across untouched. Only a number this code changes gets rounded. */
+  let kg=best.kg;
+  if((EXDB[best.from]||{}).harder===ex) kg=roundLoad(Math.max(0,kg-loadStep(kg)));
+  if(!kg) return null;
+  return { kg, from:best.from, date:best.date, estimate:true };
+}
 function suggestLoad(ex,dateISO){
   const e=EX(ex)||{};
   if(e.load!=="kg") return null;
   const prev=lastBefore(ex,dateISO||today());
-  if(!prev){ return startingLoad(ex); }
-  const t=topSet(prev); if(!t||!t.w) return startingLoad(ex);
+  if(!prev){ return relatedLoad(ex,dateISO) || startingLoad(ex); }
+  const t=topSet(prev); if(!t||!t.w) return relatedLoad(ex,dateISO) || startingLoad(ex);
   return { kg:t.w, prevReps:t.r, prevRpe:t.rpe, date:prev.date, ready:readyToAdd(ex,t) };
 }
 function readyToAdd(ex,t){
@@ -3523,7 +3580,7 @@ function refreshAnchors(dateISO,ctx){
     const a=c.anchors[k];
     if(!a || !a.ex) { delete c.anchors[k]; return; }
     if(!EX(a.ex) || ctx.blocked[a.ex] || (ctx.prefs[a.ex]||{}).avoid){ delete c.anchors[k]; return; }
-    if(daysBetween(a.since,dateISO) >= 28) delete c.anchors[k];
+    if(daysBetween(a.since,dateISO) >= buildMode().holdDays) delete c.anchors[k];
   });
 }
 
@@ -5802,7 +5859,13 @@ function exerciseHTML(w,b,it){
         '</div>':'')+
       '<div class="ec-title">'+esc(it.ex)+(it.side?' <span class="sidetag">each side</span>':'')+'</div>'+
       '<div class="ec-sub">'+esc(e.cue||"")+'</div>'+
-      (last? '<div class="ec-prev num">'+esc(last)+'</div>':'')+
+      /* the ask below already says what she did last time */
+      ((last && !showAsk)? '<div class="ec-prev num">'+esc(last)+'</div>':'')+
+      ((it.progressKind==="reps"||it.progressKind==="load"||it.progressKind==="interval")&&it.progressWhy
+        ? '<div class="target">'+ICO.up+'<span>Today: '+esc(it.progressWhy)+'</span></div>'
+        : (it.progressKind==="deload"
+           ? '<div class="ec-prev">Lighter week — same weight, less of it.</div>' : ''))+
+      ((!last && sug && sug.from)? '<div class="ec-prev">Starting from your '+esc(sug.from)+'</div>':'')+
       (showNeck? '<div class="cue neck">'+ICO.neck+'<span>'+esc(e.neck)+'</span></div>':'')+
       (it.swappedFrom? '<div class="ec-prev">Swapped from '+esc(it.swappedFrom)+'</div>':'')+
       (showAsk? loadAskHTML(it,sug):'')+
@@ -5847,7 +5910,9 @@ function roundDots(w,b){
 }
 function loadAskHTML(it,sug){
   return '<div class="cue" style="background:var(--blue-soft);color:var(--blue-ink);align-items:center;flex-wrap:wrap">'+ICO.spark+
-    '<span class="grow"><b>Last time '+kgTxt(sug.kg)+' × '+sug.prevReps+'.</b> Ready to increase?</span>'+
+    '<span class="grow"><b>'+(sug.from
+        ? "Your "+esc(sug.from)+" is at "+kgTxt(sug.kg)+"."
+        : "Last time "+kgTxt(sug.kg)+" × "+sug.prevReps+".")+'</b> Ready to increase?</span>'+
     '<span class="row" style="gap:8px;flex:0 0 auto">'+
       '<button class="chip" onclick="answerLoad(\''+it.id+'\',0)">Keep</button>'+
       '<button class="chip blue" onclick="answerLoad(\''+it.id+'\',1)">Increase</button>'+
@@ -6405,6 +6470,34 @@ function lineChart(series,label){
 }
 const KEY_LIFTS=["Hip Thrust","Romanian Deadlift","Deadlift","Goblet Squat","Seated Cable Row","Lat Pulldown",
   "Bulgarian Split Squat","DB Chest Press","Push-up","Chest-supported DB Row"];
+/* ---------- am I getting stronger ----------
+   The lifts the programme is holding still on purpose, and what has happened
+   to them since it started holding them. This is the answer to the only
+   question that matters when the sessions keep changing. */
+function buildingRows(){
+  const c=coach();
+  const keys=Object.keys(c.anchors||{});
+  if(!keys.length) return '<p class="muted small">Nothing held yet — finish a session and the main lifts settle in.</p>';
+  const seen=new Set();
+  const rows=keys.map(k=>c.anchors[k]).filter(a=>{
+    if(!a||!a.ex||seen.has(a.ex)) return false; seen.add(a.ex); return true;
+  }).map(a=>{
+    const h=[...history(a.ex)].filter(e=>e.date>=a.since).sort((x,y)=>x.date<y.date?-1:1);
+    const first=topSet(h[0]), last=topSet(h[h.length-1]);
+    const fw=(first&&first.w)||0, lw=(last&&last.w)||0;
+    const fr=(first&&first.r)||0, lr=(last&&last.r)||0;
+    let delta="", cls="";
+    if(fw&&lw&&lw>fw){ delta="+"+kgTxt(lw-fw); cls="good"; }
+    else if(fw&&lw&&lw===fw&&lr>fr){ delta="+"+(lr-fr)+" reps"; cls="good"; }
+    else if(h.length<2) delta="baseline";
+    else delta="holding";
+    return {ex:a.ex, since:a.since, sessions:h.length, now:last, delta, cls};
+  });
+  return rows.map(r=>'<div class="listrow"><span class="grow"><span class="k">'+esc(r.ex)+'</span>'+
+    '<div class="tiny dim num" style="margin-top:2px">'+
+      (r.now? esc(setText(r.now)) : "not logged yet")+' · held since '+ukShort(r.since)+'</div></span>'+
+    '<span class="v"><span class="chip '+r.cls+'">'+esc(r.delta)+'</span></span></div>').join("");
+}
 function strengthRows(){
   const lifts=[...new Set([...KEY_LIFTS,...Object.keys(DB.strength||{})])]
     .filter(ex=>history(ex).length)
@@ -6453,6 +6546,11 @@ function renderProgress(){
         '<div class="stat"><div class="k">Records</div><div class="v num">'+(st.prs||[]).length+'</div></div>'+
         '<div class="stat"><div class="k">Neck average</div><div class="v num">'+(st.neckAvg!=null?st.neckAvg:"—")+' <small>/10</small></div></div>'+
       '</div>'+
+      '<div class="card"><div class="spread" style="margin-bottom:12px"><div class="eyebrow">Building on</div>'+
+        '<button class="chip" onclick="buildSheet()">'+esc(buildMode().label)+'</button></div>'+
+        buildingRows()+
+        '<p class="tiny dim" style="margin-top:10px">These are held still for '+
+        Math.round(buildMode().holdDays/7)+' weeks so the weight can go up. Everything else rotates.</p></div>'+
       '<div class="card"><div class="spread" style="margin-bottom:12px"><div class="eyebrow">Strength</div>'+
         '<button class="chip" onclick="openHistory()">History</button></div>'+strengthRows()+'</div>'+
       '<div class="card"><div class="spread" style="margin-bottom:6px"><div class="eyebrow">Neck comfort · 30 days</div>'+
@@ -6973,6 +7071,25 @@ async function checkMedia(){
   refresh();
 }
 
+/* How much is held still so it can be built on, against how much moves. */
+function buildSheet(){
+  const cur=(DB.prefs.build)||"balanced";
+  const row=k=>{ const m=BUILD_MODES[k];
+    return '<button class="pick'+(cur===k?" on":"")+'" onclick="setBuild(\''+k+'\')">'+
+      '<span class="grow"><span class="nm">'+m.label+'</span>'+
+      '<span class="mt">'+esc(m.note)+'</span></span>'+(cur===k?ICO.check:ICO.chev)+'</button>'; };
+  openSheet("Variety and strength",
+    '<p class="muted small" style="margin-bottom:14px">Every setting still rotates the accessory work and still '+
+    'refuses to hand you the same session twice inside a month. This decides how many lifts stay put long enough '+
+    'to put weight on.</p>'+
+    row("variety")+row("balanced")+row("strength")+
+    '<p class="tiny dim" style="margin-top:12px">Changing this takes effect on the next session you build.</p>');
+}
+function setBuild(k){
+  DB.prefs.build=k;
+  coach().anchors={};            /* choose the held lifts again under the new rule */
+  save(); closeSheet(); renderSettings(); toast(BUILD_MODES[k].label);
+}
 function toneSheet(){
   const cur=(DB.prefs.coachTone==="military")?"military":"warm";
   const row=(k,nm,mt)=>'<button class="pick'+(cur===k?" on":"")+'" onclick="setTone(\''+k+'\')">'+
@@ -7025,6 +7142,10 @@ function renderSettings(){
         '<button class="chip" onclick="rebuildWorkout()">Rebuild</button></div>'+
     '</div>'+
     '<div class="card"><div class="eyebrow" style="margin-bottom:14px">Programme</div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Variety and strength</span>'+
+        '<div class="tiny dim">'+esc(buildMode().label)+' · '+plural(buildMode().anchors,"lift")+' held for '+
+        Math.round(buildMode().holdDays/7)+' weeks</div></span>'+
+        '<button class="chip" onclick="buildSheet()">Change</button></div>'+
       '<div class="listrow"><span class="grow"><span class="k">Block week</span>'+
         '<div class="tiny dim">Week '+blockWeek(today())+' of 4 · '+esc(BLOCK_NOTE[blockWeek(today())].split(" — ")[1]||"")+'</div></span>'+
         '<button class="chip" onclick="restartBlock()">Restart</button></div>'+

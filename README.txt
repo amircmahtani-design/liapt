@@ -99,6 +99,31 @@ THE PROGRAMME, NOT A FIXED LIST
   Block A's first two loaded lifts are HELD for the four-week block so
   progress on them can be measured. Everything else rotates.
 
+VARIETY AGAINST STRENGTH
+  She wants different sessions AND numbers that go up, so one control decides
+  how much is held still long enough to build on. Every setting still rotates
+  the accessory work and still refuses the same session twice inside a month.
+
+    More variety     1 lift held for 2 weeks. Almost everything changes.
+    Balanced         2 lifts held for 4 weeks.  (the default)
+    Build strength   4 lifts held for 8 weeks and driven up.
+
+  More -> Settings -> Programme -> Variety and strength.
+  Over eight simulated weeks: more variety gave 123 different movements and
+  came back to each loaded one 3 times; build strength gave 83 and came back
+  6 times, and put 8.75 kg on the hip thrust against 6.25.
+
+  Rotation used to throw strength away: a movement she had never done started
+  from a generic table, so the weight reset every time it changed. Now a new
+  movement inherits what she is already lifting on its close relatives — the
+  same pattern at the same station — and the card says where the number came
+  from. It never guesses across equipment, because 20 kg on a barbell is not
+  20 kg on a dumbbell.
+
+  Progress -> Building on shows the held lifts and what has happened to them
+  since the programme started holding them. The working card shows what today
+  is trying to beat.
+
 THE FOUR-WEEK BLOCK
   Week 1  baseline — settle the technique
   Week 2  one step up
