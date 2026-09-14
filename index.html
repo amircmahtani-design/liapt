@@ -825,6 +825,8 @@ const DEFAULTS = {
     sound:true, vibrate:true, cycleOn:true, coachTone:"warm",
     /* how much of the programme is held still so it can be built on */
     build:"balanced",
+    /* which week she is on: her own, mixed, or a bodybuilding split */
+    style:"lia",
     cooldownSec:40,
     /* The three buttons on the duration picker, and the one she used last. */
     durations:{ quick:20, standard:40, full:60 },
@@ -1005,8 +1007,8 @@ const ICO={
   up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14.5l6-6 6 6"/></svg>',
   spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l1.7 4.8L18.5 10.5 13.7 12.2 12 17l-1.7-4.8L5.5 10.5l4.8-1.7z"/></svg>',
   kit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="11" rx="2.5"/><path d="M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8"/></svg>',
-  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 10.5v9H4.5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z"/><path d="M7 10.5l4.2-6.6a1.6 1.6 0 0 1 2.9 1v3.6h4.6a1.9 1.9 0 0 1 1.85 2.35l-1.3 5.8A2.4 2.4 0 0 1 16.9 19.5H7z"/></svg>',
-  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 13.5v-9H4.5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1z"/><path d="M7 13.5l4.2 6.6a1.6 1.6 0 0 0 2.9-1v-3.6h4.6a1.9 1.9 0 0 0 1.85-2.35l-1.3-5.8A2.4 2.4 0 0 0 16.9 4.5H7z"/></svg>'
+  thumbUp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 10.5v9H4.5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z"/><path d="M7 10.5l4.2-6.6a1.6 1.6 0 0 1 2.9 1v3.6h4.6a1.9 1.9 0 0 1 1.85 2.35l-1.3 5.8A2.4 2.4 0 0 1 16.9 19.5H7z"/></svg>',
+  thumbDown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 13.5v-9H4.5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1z"/><path d="M7 13.5l4.2 6.6a1.6 1.6 0 0 0 2.9-1v-3.6h4.6a1.9 1.9 0 0 0 1.85-2.35l-1.3-5.8A2.4 2.4 0 0 0 16.9 4.5H7z"/></svg>'
 };
 function backBar(title,sub,target){
   return '<div class="topbar"><div class="row" style="gap:10px"><button class="xbtn" onclick="go(\''+target+'\')" aria-label="Back">'+ICO.back+
@@ -2519,8 +2521,114 @@ const WEEK = {
         {label:"B",rounds:2,rest:45,items:[
           {ex:"Connection Breath",time:60},{ex:"Banded Pallof Press",reps:10,side:true},{ex:"Side Plank",time:30,side:true}]}]}
 };
+/* ---------- bodybuilding days ----------
+   The week above is functional: compounds, supersets, pelvic and neck work.
+   These are hypertrophy sessions — more sets, more reps, more isolation,
+   shorter rests, one muscle group taken through its whole range. They obey
+   her brief the same way everything else does: shape the glutes and the
+   back, keep the upper body proportional, nothing overhead when the neck is
+   loud. Same shape as a WEEK entry, so the engine rotates them identically. */
+const BB_DAYS = {
+  bbGlutes:{ key:"bb-glutes", tag:"Glutes", title:"Glutes & Legs — volume",
+    focus:["glutes","hamstrings","quads"], kind:"hypertrophy",
+    full:[
+      {label:"A",rounds:4,rest:75,straight:true,items:[
+        {ex:"Hip Thrust",reps:12},{ex:"Romanian Deadlift",reps:12}]},
+      {label:"B",rounds:4,rest:60,items:[
+        {ex:"Bulgarian Split Squat",reps:12,side:true},{ex:"Cable Kickback",reps:15,side:true}]},
+      {label:"C",rounds:3,rest:45,items:[
+        {ex:"Cable Standing Abduction",reps:15,side:true},{ex:"Frog Pump",reps:20},{ex:"Glute Bridge Hold",time:45}]}],
+    short:[
+      {label:"A",rounds:3,rest:60,straight:true,items:[
+        {ex:"Hip Thrust",reps:12},{ex:"DB Romanian Deadlift",reps:12}]},
+      {label:"B",rounds:3,rest:45,items:[
+        {ex:"Reverse Lunge",reps:12,side:true},{ex:"Frog Pump",reps:20}]}]},
+
+  bbBack:{ key:"bb-back", tag:"Back", title:"Back & Shoulders — volume",
+    focus:["lats","upper-back","back","shoulders"], kind:"hypertrophy",
+    full:[
+      {label:"A",rounds:4,rest:75,straight:true,items:[
+        {ex:"Lat Pulldown",reps:12},{ex:"Seated Cable Row",reps:12}]},
+      {label:"B",rounds:4,rest:60,items:[
+        {ex:"Chest-supported DB Row",reps:12},{ex:"Straight-arm Pulldown",reps:15}]},
+      {label:"C",rounds:3,rest:45,items:[
+        {ex:"Reverse Fly",reps:15},{ex:"Face Pull",reps:15},{ex:"Lateral Raise",reps:12}]}],
+    short:[
+      {label:"A",rounds:3,rest:60,straight:true,items:[
+        {ex:"Lat Pulldown",reps:12},{ex:"Seated Cable Row",reps:12}]},
+      {label:"B",rounds:3,rest:45,items:[
+        {ex:"Reverse Fly",reps:15},{ex:"Face Pull",reps:15}]}]},
+
+  bbLegs:{ key:"bb-legs", tag:"Legs", title:"Quads & Hamstrings — volume",
+    focus:["quads","hamstrings","glutes"], kind:"hypertrophy",
+    full:[
+      {label:"A",rounds:4,rest:75,straight:true,items:[
+        {ex:"Goblet Squat",reps:12},{ex:"Stability Ball Hamstring Curl",reps:15}]},
+      {label:"B",rounds:4,rest:60,items:[
+        {ex:"Step-up",reps:12,side:true},{ex:"Walking Lunge",reps:12,side:true}]},
+      {label:"C",rounds:3,rest:45,items:[
+        {ex:"Wall Sit",time:45},{ex:"Calf Raise",reps:15},{ex:"Glute Bridge",reps:20}]}],
+    short:[
+      {label:"A",rounds:3,rest:60,straight:true,items:[
+        {ex:"Goblet Squat",reps:12},{ex:"Reverse Lunge",reps:12,side:true}]},
+      {label:"B",rounds:3,rest:45,items:[
+        {ex:"Wall Sit",time:45},{ex:"Glute Bridge",reps:20}]}]},
+
+  bbArms:{ key:"bb-arms", tag:"Arms", title:"Chest, Arms & Core — volume",
+    focus:["chest","arms","deep-core"], kind:"hypertrophy",
+    full:[
+      {label:"A",rounds:4,rest:60,items:[
+        {ex:"DB Chest Press",reps:12},{ex:"Cable Curl",reps:12}]},
+      {label:"B",rounds:4,rest:60,items:[
+        {ex:"DB Fly",reps:15},{ex:"Triceps Pushdown",reps:15}]},
+      {label:"C",rounds:3,rest:45,items:[
+        {ex:"Hammer Curl",reps:12},{ex:"Dead Bug",reps:10,side:true},{ex:"Side Plank",time:40,side:true}]}],
+    short:[
+      {label:"A",rounds:3,rest:50,items:[
+        {ex:"Push-up",reps:12},{ex:"DB Curl",reps:12}]},
+      {label:"B",rounds:3,rest:45,items:[
+        {ex:"Triceps Pushdown",reps:15},{ex:"Dead Bug",reps:10,side:true}]}]},
+
+  bbFull:{ key:"bb-full", tag:"Full body", title:"Full Body — volume",
+    focus:["glutes","back","deep-core"], kind:"hypertrophy",
+    full:[
+      {label:"A",rounds:4,rest:75,straight:true,items:[
+        {ex:"Deadlift",reps:10},{ex:"Chest-supported DB Row",reps:12}]},
+      {label:"B",rounds:4,rest:60,items:[
+        {ex:"Goblet Squat",reps:12},{ex:"DB Chest Press",reps:12}]},
+      {label:"C",rounds:3,rest:45,items:[
+        {ex:"Cable Kickback",reps:15,side:true},{ex:"Pallof Press",reps:12,side:true},{ex:"Plank",time:45}]}],
+    short:[
+      {label:"A",rounds:3,rest:60,straight:true,items:[
+        {ex:"DB Romanian Deadlift",reps:12},{ex:"Push-up",reps:12}]},
+      {label:"B",rounds:3,rest:45,items:[
+        {ex:"Goblet Squat",reps:12},{ex:"Plank",time:45}]}]}
+};
+
+/* ---------- which week she is on ----------
+   Her own week is the default and is unchanged. Mixed keeps the days that
+   carry the programme — the glute work, the conditioning — and turns the
+   other two into volume sessions. Bodybuilding is a five-day split. */
+const PROGRAMME_STYLES = {
+  lia: { label:"Lia's week",
+         note:"Compounds, supersets, pelvic and neck work. Five days as written.",
+         week:{1:null,2:null,3:null,4:null,5:null} },
+  mixed: { label:"Mixed",
+         note:"Her week, with two of the five days turned into higher-volume bodybuilding sessions.",
+         week:{1:null,2:"bbBack",3:null,4:null,5:"bbArms"} },
+  bodybuilding: { label:"Bodybuilding split",
+         note:"Five hypertrophy days: glutes, back and shoulders, legs, chest and arms, full body.",
+         week:{1:"bbGlutes",2:"bbBack",3:"bbLegs",4:"bbArms",5:"bbFull"} }
+};
+function programmeStyle(){ return PROGRAMME_STYLES[(DB.prefs&&DB.prefs.style)] || PROGRAMME_STYLES.lia; }
+
 const REST_DAYS = [0,6];   /* Sunday, Saturday */
-function dayPlan(dateISO){ const d=dowOf(dateISO); return WEEK[d]||null; }
+function dayPlan(dateISO){
+  const d=dowOf(dateISO);
+  const swap=(programmeStyle().week||{})[d];
+  if(swap && BB_DAYS[swap]) return BB_DAYS[swap];
+  return WEEK[d]||null;
+}
 function isRestDay(dateISO){ return REST_DAYS.includes(dowOf(dateISO)); }
 
 /* ---------- preparation: neck first, every session ---------- */
@@ -2757,6 +2865,8 @@ function buildContext(dateISO,ci){
     blocked: c.blocked||{},
     prefs: DB.exPrefs||{},
     recent2, prevSet,
+    weekGaps: weekGaps(date),
+    daysLeft: daysLeftThisWeek(date),
     prevExercises: prev.length? exercisesIn(prev[0]) : [],
     usage: usageMap(date),
     shown: shownMap(date),
@@ -2764,6 +2874,49 @@ function buildContext(dateISO,ci){
     history10: perf,
     nonce: c.nonce||0
   };
+}
+
+/* ---------- the week, not just the day ----------
+   A session that ignores the rest of the week can leave her pulling four
+   days running and never pressing. This is what the week has covered so far,
+   what is still to come, and what is missing. */
+const WEEK_TARGET = { squat:1, hinge:1, lunge:1, glute:2, push:1, pull:2, core:2, conditioning:1 };
+function weekDays(dateISO){
+  const start=weekStart(dateISO||today());
+  return [0,1,2,3,4,5,6].map(i=>addDays(start,i));
+}
+/* Counted in DAYS, not exercises: one back session covers four pulls, which
+   is not the same as pulling twice in a week. */
+function weekBalance(dateISO){
+  const d=dateISO||today();
+  const bal={};
+  weekDays(d).filter(k=>k<=d).forEach(k=>{
+    const s=(DB.sessions||{})[k];
+    if(!s||s.rest||s.deleted) return;
+    const seen=new Set(exercisesIn(s).map(catOf));
+    seen.forEach(c=>{ bal[c]=(bal[c]||0)+1; });
+  });
+  return bal;
+}
+function weekGaps(dateISO){
+  const bal=weekBalance(dateISO);
+  return Object.keys(WEEK_TARGET).filter(c=>(bal[c]||0) < WEEK_TARGET[c]);
+}
+/* How many training days are left after this one, so the engine knows
+   whether a gap still has somewhere to go. */
+function daysLeftThisWeek(dateISO){
+  const d=dateISO||today();
+  return weekDays(d).filter(k=>k>d && !isRestDay(k)).length;
+}
+function weekAhead(dateISO){
+  const d=dateISO||today();
+  return weekDays(d).map(k=>{
+    const s=(DB.sessions||{})[k];
+    const p=dayPlan(k);
+    return { date:uk(k), day:DOW[dowOf(k)], rest:isRestDay(k),
+             title:(s&&!s.deleted? s.title : (p? p.title : "Rest")),
+             done:!!(s&&s.state&&s.state.finished), past:k<d, today:k===d };
+  });
 }
 
 /* ---------- candidate filtering ---------- */
@@ -2826,8 +2979,14 @@ function scoreCandidate(nm,slot,ctx){
   if((ctx.prefs[nm]||{}).love) s+=5;
   /* something she already has numbers on is worth more than a fresh face
      when the point is to get stronger */
+  /* Familiarity is worth something — but it saturates, or a movement she has
+     done often would keep winning simply because she has done it often. */
   const done=(c.exStats[nm]||{}).done||0;
-  if(done) s += Math.min(done,6)*(2/Math.max(rot,0.4));
+  if(done) s += Math.min(done,4)*(1.5/Math.max(rot,0.4));
+  /* the week is short of this pattern and running out of days to fix it.
+     Kept small: it is there to tip a close call toward the missing category,
+     not to override how recently she did the movement. */
+  if((ctx.weekGaps||[]).includes(catOf(nm))) s += ctx.daysLeft<=1? 8 : 4;
   if((DB.prefs.favourEquipment||[]).includes(e.eq)) s+=4;
   if(hasRealMedia(nm)) s+=3;
   if(ctx.pelvic && (e.tags||[]).includes("pelvic-safe")) s+=4;
@@ -2924,8 +3083,14 @@ function noteProgress(ex,kind){
    "Choose for me" uses the week. Anything else picks the day whose shape
    fits what she asked for, keeping the day's own warm-up and cool-down. */
 const FOCUS_DAY = { glutes:1, upper:2, legs:3, conditioning:4, core:5 };
+/* the volume days are reachable on any day, whatever week she is on */
+const FOCUS_BB  = { bbGlutes:"bbGlutes", bbBack:"bbBack", bbLegs:"bbLegs",
+                    bbArms:"bbArms", bbFull:"bbFull" };
 const FOCUS_LABEL = { auto:"Coach picks", glutes:"Glutes", upper:"Upper body",
-                      legs:"Legs", core:"Core", mobility:"Mobility", conditioning:"Conditioning" };
+                      legs:"Legs", core:"Core", mobility:"Mobility", conditioning:"Conditioning",
+                      bbGlutes:"Glutes — volume", bbBack:"Back & shoulders — volume",
+                      bbLegs:"Quads & hamstrings — volume", bbArms:"Chest, arms & core — volume",
+                      bbFull:"Full body — volume" };
 const MOBILITY_DAY = {
   key:"mob", tag:"Mobility", title:"Mobility & Breathing", focus:["mobility","deep-core"], kind:"mobility",
   full:[{label:"A",rounds:2,rest:30,flow:true,items:[
@@ -2940,6 +3105,7 @@ function planForDay(dateISO,ci){
   const base=dayPlan(dateISO);
   const want=(ci&&ci.focus)||"auto";
   if(want==="mobility") return MOBILITY_DAY;
+  if(FOCUS_BB[want]) return BB_DAYS[FOCUS_BB[want]]||base;
   if(want!=="auto" && FOCUS_DAY[want]) return WEEK[FOCUS_DAY[want]]||base;
   /* she didn't ask, but she told us what is sore */
   if(base && ci){
@@ -3280,6 +3446,15 @@ function buildWhy(w,ctx,kept,rotated){
   else if(ctx.lastFeedback && ctx.lastFeedback.effort==="hard") add("Last session felt hard, so nothing new gets added today.");
   else if(ctx.energy<=3) add("You checked in low, so the volume is down and the rests are longer.");
 
+  const balanced=(w.blocks||[]).flatMap(b=>b.items).filter(i=>i.balance);
+  if(balanced.length) add("Last day of the week and you hadn't done any "+
+    catLabel(balanced[0].cat).toLowerCase()+", so "+balanced[0].ex+" goes in.");
+  else {
+    const filled=(ctx.weekGaps||[]).filter(g=>
+      (w.blocks||[]).some(b=>b.items.some(i=>i.cat===g)));
+    if(filled.length) add("Your week was short of "+
+      filled.slice(0,2).map(g=>catLabel(g).toLowerCase()).join(" and ")+", so today covers it.");
+  }
   add(BLOCK_NOTE[ctx.week]);
   if(rotated.length) add(plural(rotated.length,"accessory movement")+" changed — you did the others this week.");
   if(w.targetMins) add("Built to about "+w.mins+" minutes, which is what you asked for.");
@@ -3401,7 +3576,31 @@ const START_LOAD = {
   "Cable Lateral Raise":3,"Cable Standing Abduction":5,"Pallof Press":10,"Half-kneeling Pallof Press":7.5,
   "Cable Woodchop":10,"Smith Bench Press":20,"DB Thruster":5,"Heel-elevated Goblet Squat":8
 };
-function startingLoad(ex){ const kg=START_LOAD[ex]; return kg?{kg,estimate:true}:null; }
+/* ---------- where a first weight comes from ----------
+   The table above was written for a 65 kg lifter. Everything scales from her
+   actual bodyweight, so the first suggestion is hers rather than a stranger's,
+   and it moves if she does. Height only makes a small difference, and only on
+   the lifts where a longer body genuinely means a longer path under the bar. */
+const START_REF_KG = 65;
+function bodyWeight(){
+  const logged=(DB.weights||[]).slice(-1)[0];
+  return (logged&&+logged.kg) || +((DB.profile||{}).weightKg) || START_REF_KG;
+}
+function leverFactor(ex){
+  const e=EX(ex)||{};
+  if(!/^(hinge|squat)$/.test(e.pat||"")) return 1;
+  const h=+((DB.profile||{}).heightCm)||170;
+  /* a taller lifter moves the bar further for the same rep — start a touch
+     lighter, and never by more than a tenth either way */
+  return clamp(1-(h-170)/100*0.5, 0.9, 1.1);
+}
+function startingLoad(ex){
+  const ref=START_LOAD[ex];
+  if(!ref) return null;
+  const kg=roundLoad(ref/START_REF_KG*bodyWeight()*leverFactor(ex));
+  if(!kg) return null;
+  return { kg, estimate:true, fromBody:true };
+}
 
 /* ---------- readiness from the morning check-in ---------- */
 function checkinOn(dateISO){ return (DB.checkins||{})[dateISO||today()]||null; }
@@ -3791,6 +3990,33 @@ function buildSession(dateISO,mode){
       return it;
     }).filter(Boolean)
   })).filter(b=>b.items.length);
+
+  /* ---- the balance slot ----
+     Leaning a slot toward a missing category only works if a slot of that
+     category exists. On the last training day of the week it does not, so one
+     accessory slot is re-pointed at whatever the week never got to. Never an
+     anchor, never more than one, and only when the week is actually short. */
+  const gaps=ctx.weekGaps||[];
+  if(ctx.daysLeft===0 && gaps.length && blocks.length){
+    const lastBlock=blocks[blocks.length-1];
+    const idx=lastBlock.items.map((it,i)=>({it,i})).filter(x=>x.it.role!=="anchor").pop();
+    if(idx){
+      const taken2=new Set(exercisesIn({blocks}));
+      taken2.delete(idx.it.ex);
+      for(const gap of gaps){
+        const slot={...(idx.it.slot||{}), cat:gap, loaded:false, timed:false,
+                    role:"accessory", key:(plan.key||"day")+"/balance"};
+        const pick=pickForSlot(slot,ctx,taken2);
+        if(pick && pick!==idx.it.ex){
+          const it=newItem({ex:pick, reps:idx.it.reps!=null?idx.it.reps:10,
+                            time:idx.it.time, side:idx.it.side});
+          it.slot=slot; it.role="accessory"; it.cat=gap; it.balance=true;
+          lastBlock.items[idx.i]=it;
+          break;
+        }
+      }
+    }
+  }
 
   /* week four is the lighter week — the volume comes off here, not the reps */
   if(ctx.week===4) blocks.forEach(b=>{ if(!b.flow) b.rounds=Math.max(2,(b.rounds||3)-1); });
@@ -4351,6 +4577,13 @@ function coachContext(){
     profile:{name:DB.profile.name,age:DB.profile.age,experience:DB.profile.experience,
              goals:DB.profile.goals,avoid:DB.profile.avoid,equipment:DB.profile.equipment,
              cSection:DB.profile.csection},
+    thisWeek:{
+      style:programmeStyle().label,
+      days:weekAhead(d),
+      balanceSoFar:weekBalance(d),
+      stillShortOf:weekGaps(d).map(catLabel),
+      trainingDaysLeft:daysLeftThisWeek(d)
+    },
     programme:{
       blockWeek:blockWeek(d), blockNote:BLOCK_NOTE[blockWeek(d)],
       heldForProgress:Object.keys(c.anchors||{}).map(k=>c.anchors[k].ex),
@@ -4659,6 +4892,13 @@ history, her four-week block, what she did in the last two sessions, the kit
 she has today and anything on hold after pain. You may adjust it by returning
 one action, and the app will refuse anything that breaks those rules.
 
+THINK IN WEEKS, NOT DAYS. thisWeek tells you what she has already trained,
+what is still to come and what the week is short of. Answer "what should I do
+today" in the context of the whole week: if she has pulled twice and not
+pressed, say so; if she is asking to move a session, say what it does to the
+rest of the week; if two days are left and the week is short of legs, that is
+the answer.
+
 When she wants a different movement, prefer "rotate" — the app picks the best
 approved alternative for that slot. Only use "replace" when she names the
 movement she wants, and then choose from that item's approvedAlternatives in
@@ -4728,6 +4968,11 @@ function fallbackChat(text){
     return "Tell me which movement at the end of the session, or use Report pain in the session menu, and it comes out of the programme. If it's sharp or getting worse, stop and get it looked at.";
   if(/what.*today|plan|session/.test(t) && w && !w.rest)
     return w.title+" — "+w.mins+" minutes, "+plural((w.blocks||[]).length,"block")+". "+((w.why||[])[0]||"");
+  if(/week|rest of/.test(t)){
+    const wk=weekStats(); const gaps=weekGaps(d);
+    return wk.done+" of "+wk.planned+" done this week"+
+      (gaps.length? ". Still short of "+gaps.map(catLabel).join(" and ").toLowerCase()+"." : ". Balance looks right.");
+  }
   if(/neck/.test(t)) return "Put a number on it in the check-in. That's what changes the session.";
   if(/food|eat|calorie|protein|diet/.test(t)) return "Not this app. Training only.";
   if(!ci) return pickLine("nocheckin");
@@ -4967,7 +5212,8 @@ function ciQuick(group,k,v,btn){
    Four one-tap rows and two quiet pills. Every one of them changes what the
    engine builds; nothing here is asked for the sake of asking. */
 const SORE_OPTS=[["No","none"],["Legs","legs"],["Upper","upper"]];
-const FOCUS_OPTS=["auto","glutes","upper","legs","core","mobility"];
+const FOCUS_OPTS=["auto","glutes","upper","legs","core","mobility",
+                  "bbGlutes","bbBack","bbLegs","bbArms","bbFull"];
 function focusLabel(k){ return FOCUS_LABEL[k]||k; }
 function equipSummary(c){
   const list=(c&&Array.isArray(c.equip)&&c.equip.length)? c.equip : null;
@@ -5007,15 +5253,26 @@ function quickCheckinHTML(){
    answer most days — the week already knows. */
 function openFocusPick(){
   const c=ciDraft();
+  const row=k=>'<button class="pick'+(c.focus===k?" on":"")+'" onclick="setFocus(\''+k+'\')">'+
+    '<span class="grow"><span class="nm">'+esc(focusLabel(k))+'</span>'+
+    '<span class="mt">'+esc(FOCUS_WHY[k]||"")+'</span></span>'+
+    (c.focus===k?ICO.check:ICO.chev)+'</button>';
+  const plain=FOCUS_OPTS.filter(k=>!FOCUS_BB[k]);
+  const vol=FOCUS_OPTS.filter(k=>FOCUS_BB[k]);
   openSheet("What do you want today?",
-    FOCUS_OPTS.map(k=>'<button class="pick'+(c.focus===k?" on":"")+'" onclick="setFocus(\''+k+'\')">'+
-      '<span class="grow"><span class="nm">'+esc(focusLabel(k))+'</span>'+
-      '<span class="mt">'+esc(FOCUS_WHY[k]||"")+'</span></span>'+
-      (c.focus===k?ICO.check:ICO.chev)+'</button>').join("")+
-    '<p class="tiny dim" style="margin-top:10px">This only changes today.</p>');
+    plain.map(row).join("")+
+    '<div class="eyebrow" style="margin:18px 0 10px">Bodybuilding · higher volume</div>'+
+    vol.map(row).join("")+
+    '<p class="tiny dim" style="margin-top:10px">This only changes today. To change the whole week, '+
+    'use Settings \u2192 Programme \u2192 Training week.</p>');
 }
 const FOCUS_WHY={
   auto:"Choose for me — follow the week and the history",
+  bbGlutes:"Bodybuilding: heavy thrusts, split squats, isolation",
+  bbBack:"Bodybuilding: pulldowns, rows, rear delts",
+  bbLegs:"Bodybuilding: squats, curls, lunges, calves",
+  bbArms:"Bodybuilding: press, curls, triceps, core",
+  bbFull:"Bodybuilding: one heavy pull, one heavy push, the rest",
   glutes:"Glutes and hamstrings",
   upper:"Back, posture and the upper body",
   legs:"Quads, glutes and single-leg work",
@@ -5915,7 +6172,7 @@ function readyHTML(w){
         '<span class="chip">'+plural((w.blocks||[]).length,"block")+'</span>'+
         '<span class="chip">'+plural((w.prep||[]).length,"warm-up move")+'</span>'+
         (w.adjustments&&w.adjustments.length?'<span class="chip warn">adjusted</span>':'')+
-        (w.replay?'<span class="chip good">'+ICO.up+'back by request</span>':'')+
+        (w.replay?'<span class="chip good">'+ICO.thumbUp+'back by request</span>':'')+
         '<button class="chip blue" onclick="whySheet()">'+ICO.info+'Why this?</button>'+
       '</div>'+
       '<button class="btn big" onclick="startWorkout()">'+ICO.play+
@@ -6099,8 +6356,9 @@ function roundDots(w,b){
 function loadAskHTML(it,sug){
   const note=progressNote(it.ex);
   const line = note? note.text
-    : (sug.from? "Your "+esc(sug.from)+" is at "+kgTxt(sug.kg)+". Start there."
-               : "Last time "+kgTxt(sug.kg)+" × "+sug.prevReps+". Ready to increase?");
+    : sug.from? "Your "+esc(sug.from)+" is at "+kgTxt(sug.kg)+". Start there."
+    : sug.fromBody? "First go at this one. "+kgTxt(sug.kg)+" suits your bodyweight — adjust if it's wrong."
+    : "Last time "+kgTxt(sug.kg)+" × "+sug.prevReps+". Ready to increase?";
   const target=(note&&note.up)? note.kg : roundLoad(sug.kg+loadStep(sug.kg));
   return '<div class="cue" style="background:var(--blue-soft);color:var(--blue-ink);align-items:center;flex-wrap:wrap">'+ICO.spark+
     '<span class="grow"><b>'+esc(line)+'</b></span>'+
@@ -6207,8 +6465,8 @@ function fbCard(w){
     ico+'<span class="t">'+t+'</span><span class="s">'+sub+'</span></button>';
   let body='<div class="eyebrow">Do you want this workout again?</div>'+
     '<div class="thumbs">'+
-      thumb("up",ICO.up,"Yes","Run it again, heavier")+
-      thumb("down",ICO.down,"No","Don\'t build this one again")+
+      thumb("up",ICO.thumbUp,"Yes","Run it again, heavier")+
+      thumb("down",ICO.thumbDown,"No","Don\'t build this one again")+
     '</div>';
   if(step!=="rating"){
     body+='<div class="hair"></div><div class="eyebrow">How did that feel?</div>'+
@@ -6802,8 +7060,8 @@ function recentSessionRows(n){
       '<div class="tiny dim num" style="margin-top:2px">'+esc(when)+' · '+done+' of '+total+' sets'+
         (x.elapsedMs? ' · '+mins+' min':'')+'</div></span>'+
       '<span class="v">'+
-        (r==="up"? '<span class="chip good">'+ICO.up+'</span>' :
-         r==="down"? '<span class="chip bad">'+ICO.down+'</span>' :
+        (r==="up"? '<span class="chip good">'+ICO.thumbUp+'</span>' :
+         r==="down"? '<span class="chip bad">'+ICO.thumbDown+'</span>' :
          x.state.finished? '<span class="chip good">'+ICO.check+'</span>' : '<span class="chip">part</span>')+
         ICO.chev+'</span></button>';
   }).join("");
@@ -7372,6 +7630,26 @@ async function checkMedia(){
 }
 
 /* How much is held still so it can be built on, against how much moves. */
+/* Her own week, or a bodybuilding split, or half of each. */
+function styleSheet(){
+  const cur=(DB.prefs.style)||"lia";
+  const row=k=>{ const m=PROGRAMME_STYLES[k];
+    return '<button class="pick'+(cur===k?" on":"")+'" onclick="setStyle(\''+k+'\')">'+
+      '<span class="grow"><span class="nm">'+esc(m.label)+'</span>'+
+      '<span class="mt">'+esc(m.note)+'</span></span>'+(cur===k?ICO.check:ICO.chev)+'</button>'; };
+  openSheet("Training week",
+    '<p class="muted small" style="margin-bottom:14px">The engine rotates the movements and holds the main '+
+    'lifts whichever you pick. This is about the shape of the week.</p>'+
+    row("lia")+row("mixed")+row("bodybuilding")+
+    '<p class="tiny dim" style="margin-top:12px">You can also pick a volume day for one session only, from the '+
+    'focus button on the check-in.</p>');
+}
+function setStyle(k){
+  DB.prefs.style=k;
+  coach().anchors={};            /* the held lifts belong to the old week */
+  save(); closeSheet(); renderSettings(); rebuildWorkout();
+  toast(PROGRAMME_STYLES[k].label);
+}
 function buildSheet(){
   const cur=(DB.prefs.build)||"balanced";
   const row=k=>{ const m=BUILD_MODES[k];
@@ -7442,6 +7720,9 @@ function renderSettings(){
         '<button class="chip" onclick="rebuildWorkout()">Rebuild</button></div>'+
     '</div>'+
     '<div class="card"><div class="eyebrow" style="margin-bottom:14px">Programme</div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Training week</span>'+
+        '<div class="tiny dim">'+esc(programmeStyle().label)+'</div></span>'+
+        '<button class="chip" onclick="styleSheet()">Change</button></div>'+
       '<div class="listrow"><span class="grow"><span class="k">Variety and strength</span>'+
         '<div class="tiny dim">'+esc(buildMode().label)+' · '+plural(buildMode().anchors,"lift")+' held for '+
         Math.round(buildMode().holdDays/7)+' weeks</div></span>'+

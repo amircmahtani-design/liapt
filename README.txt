@@ -99,6 +99,51 @@ THE PROGRAMME, NOT A FIXED LIST
   Block A's first two loaded lifts are HELD for the four-week block so
   progress on them can be measured. Everything else rotates.
 
+THE TRAINING WEEK, AND BODYBUILDING DAYS
+  More -> Settings -> Programme -> Training week.
+
+    Lia's week        the five days as written: compounds, supersets,
+                      pelvic and neck work.                   (the default)
+    Mixed             her week, with two of the five turned into volume
+                      sessions — back and shoulders, chest and arms.
+    Bodybuilding      a five-day hypertrophy split: glutes and legs, back
+                      and shoulders, quads and hamstrings, chest arms and
+                      core, full body.
+
+  The volume days are higher-rep (12 on average), more isolation, shorter
+  rests, straight sets on the main lifts. They obey the same rules as
+  everything else — nothing overhead when the neck is loud, nothing she has
+  ruled out, and the movements still rotate.
+
+  She can also take one volume day without changing the week: the focus
+  button on the check-in now lists all five.
+
+THE WEEK, NOT JUST THE DAY
+  The engine used to build each day in isolation, which let her pull on one
+  day a week and press on none. It now knows what the week has covered, what
+  is still to come and what is missing, and leans each session toward the
+  gap.
+
+  On the LAST training day of the week one accessory slot is given to
+  whatever the week never got to — "Last day of the week and you hadn't done
+  any pulling, so Banded Row goes in." Over four simulated weeks that took
+  her from one pulling day a week to two. On a bands-only week that costs
+  one rotating slot; pulling twice is the better trade.
+
+  The coach sees all of it: the whole week day by day, what is done, what is
+  left, and what is still short. Ask it what to do today and it answers in
+  the context of the week.
+
+STARTING WEIGHTS
+  The first suggestion for a movement she has never done is now worked out
+  from her bodyweight rather than a fixed table, so it is hers and it moves
+  if she does. At 65 kg a hip thrust starts at 20 kg; at 80 kg it starts at
+  25. A logged weight beats the profile figure. Height makes a small
+  difference, and only on squats and hinges, where a longer body genuinely
+  moves the bar further — never more than a tenth either way.
+  The card says where a number came from, and every suggestion is still
+  hers to accept or change.
+
 VARIETY AGAINST STRENGTH
   She wants different sessions AND numbers that go up, so one control decides
   how much is held still long enough to build on. Every setting still rotates
