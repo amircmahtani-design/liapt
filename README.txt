@@ -210,6 +210,30 @@ THE PHONE AND THE IPAD
   two-column home and the same side-by-side working set. Pinch-zoom works
   again.
 
+THE WARM-UP AND THE COOL-DOWN
+  Both now show the move she is on, full width, with its cue — not just a
+  thumbnail. Tick it and the picture moves to the next one. Tapping any name
+  in the list below opens the full instructions. Nothing about the order or
+  the checklist changed; it just stopped assuming she already knows the
+  movement.
+
+WHAT YOU DID, AND WHEN
+  Progress leads with two things:
+
+    Ready to go up   the lifts due a step, said plainly —
+                     "Last time 20 kg and it felt easy — try 22.5 kg."
+                     It uses what she actually lifted and what she said the
+                     session felt like. If she said it was hard it says stay
+                     there instead.
+
+    What you did     every session, newest first: the day, what it was, how
+                     many sets she got through, how long it took and whether
+                     she gave it a thumbs up. Tap one to open that day.
+
+  The same sentence appears on the working card when the movement comes back,
+  with a "Keep 20 kg" and a "Go 22.5 kg" button, so the number she is aiming
+  at is one tap.
+
 THE PICTURES
   A picture in the demos folder now BEATS the built-in animation, which
   lives on someone else's server. So the pictures you add are the ones she
