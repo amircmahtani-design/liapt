@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -36,6 +36,7 @@
   --sh-3:0 2px 6px rgba(20,26,45,.06), 0 24px 48px -22px rgba(20,26,45,.30);
   --ease:cubic-bezier(.23,1,.32,1);
   --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
+  --safe-left:env(safe-area-inset-left,0px); --safe-right:env(safe-area-inset-right,0px);
   --font:"Instrument Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -87,6 +88,11 @@ p{margin:0;text-wrap:pretty;}
 .card.pad-lg{padding:var(--s5);}
 .card.tight{padding:var(--s4);}
 .card.flat{box-shadow:none;border:1px solid var(--line);}
+/* a whole card that is a button */
+.card.tap{display:block;width:100%;text-align:left;transition:transform .16s var(--ease);}
+.card.tap:active{transform:scale(.99);}
+.card.tap .k{font-size:15.5px;font-weight:600;letter-spacing:-.01em;}
+.card.tap > .spread > svg{width:20px;height:20px;flex:0 0 20px;color:var(--ink-4);}
 .hair{height:1px;background:var(--line-2);margin:var(--s4) 0;}
 
 /* ---------- buttons ---------- */
@@ -113,7 +119,9 @@ p{margin:0;text-wrap:pretty;}
 .chip.warn{background:var(--warn-soft);color:var(--warn);}
 .chip.bad{background:var(--bad-soft);color:var(--bad);}
 .chip.rose{background:var(--rose-soft);color:var(--rose);}
-.linkbtn{font-size:14px;font-weight:600;color:var(--blue);padding:8px 2px;}
+button.chip{min-height:36px;padding-top:0;padding-bottom:0;}
+.linkbtn{font-size:14px;font-weight:600;color:var(--blue);padding:8px 2px;
+  min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:6px;}
 
 /* ---------- segmented / sliders ---------- */
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;background:var(--bg-2);
@@ -159,12 +167,12 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 /* ---------- calendar ---------- */
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--s4);}
 .cal-nav{display:flex;gap:6px;}
-.cal-nav button{width:38px;height:38px;border-radius:11px;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-2);}
+.cal-nav button{width:40px;height:40px;border-radius:11px;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-2);}
 .cal-nav button:active{transform:scale(.94);}
 .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;}
 .cal-dow span{text-align:center;font-size:11px;font-weight:600;color:var(--ink-4);letter-spacing:.04em;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
-.cal-cell{aspect-ratio:1/1;border-radius:12px;display:flex;flex-direction:column;align-items:center;
+.cal-cell{aspect-ratio:1/1;min-width:0;border-radius:12px;display:flex;flex-direction:column;align-items:center;
   justify-content:center;gap:3px;background:transparent;font-size:14px;font-weight:500;color:var(--ink-2);
   position:relative;transition:background .16s var(--ease),transform .16s var(--ease);min-height:40px;}
 .cal-cell:active{transform:scale(.92);}
@@ -186,9 +194,11 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 .qrow{display:flex;align-items:center;gap:var(--s3);padding:12px 0;border-bottom:1px solid var(--line-2);}
 .qrow:last-of-type{border-bottom:none;}
 .qrow .ql{width:70px;flex:0 0 70px;font-size:15px;font-weight:600;letter-spacing:-.01em;}
+@media(max-width:420px){ .qrow .ql{width:56px;flex:0 0 56px;font-size:14.5px;} .seg3 button{font-size:13.5px;} }
 .seg3{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;background:var(--bg-2);padding:4px;
   border-radius:14px;flex:1;min-width:0;}
-.seg3 button{min-height:44px;border-radius:11px;font-size:14px;font-weight:600;color:var(--ink-2);
+.seg3 button{min-height:44px;min-width:0;border-radius:11px;font-size:14px;font-weight:600;color:var(--ink-2);
+  padding:0 4px;white-space:nowrap;
   transition:background .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease);}
 .seg3 button.on{background:var(--blue);color:#fff;box-shadow:0 5px 12px -7px rgba(19,72,201,.9);}
 
@@ -282,7 +292,7 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
   background:transparent;transition:background .16s var(--ease);}
 .navbtn:active{background:var(--bg-2);}
 .navbtn svg{width:20px;height:20px;}
-.navbtn.sm{width:34px;height:34px;}
+.navbtn.sm{width:40px;height:40px;}
 .navbtn.sm svg{width:17px;height:17px;}
 .strip{display:flex;align-items:center;gap:var(--s3);background:var(--surface);border-radius:var(--r);
   padding:8px 8px 8px 16px;box-shadow:var(--sh-1);margin-bottom:10px;}
@@ -298,6 +308,11 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 .pausebtn.wide{flex:1;justify-content:center;min-height:54px;font-size:16px;}
 .paused-note{background:var(--warn-soft);color:var(--warn);font-size:13.5px;font-weight:500;
   border-radius:var(--r-sm);padding:10px 14px;margin-bottom:10px;}
+/* quiet, always reachable, never next to the blue button */
+.cancelbtn{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 4px;margin:0 0 8px;
+  font-size:13px;font-weight:600;color:var(--ink-3);letter-spacing:-.01em;}
+.cancelbtn svg{width:14px;height:14px;}
+.cancelbtn:active{color:var(--bad);}
 
 /* ---------- duration picker ---------- */
 .durgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
@@ -339,7 +354,7 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 .mini.big{flex:1;}
 .mini.big .v{flex:1;font-size:18px;}
 .mini.sm{padding:2px;}
-.mini.sm button{width:32px;height:32px;font-size:17px;}
+.mini.sm button{width:36px;height:36px;font-size:17px;}
 .mini.sm .v{min-width:72px;font-size:13.5px;}
 .ec-title{font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.08;}
 .sidetag{font-size:13px;font-weight:500;color:var(--ink-3);letter-spacing:0;vertical-align:4px;}
@@ -432,7 +447,7 @@ details.sec[open] summary svg{transform:rotate(180deg);}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:var(--s3) var(--s5) var(--s3);flex:0 0 auto;gap:var(--s3);}
 .sheet-head h3{font-size:18px;letter-spacing:-.02em;}
 .sheet-body{padding:0 var(--s5) calc(var(--s5) + var(--safe-bot));overflow-y:auto;-webkit-overflow-scrolling:touch;}
-.xbtn{width:36px;height:36px;flex:0 0 36px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-2);}
+.xbtn{width:40px;height:40px;flex:0 0 40px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-2);}
 .pick{display:flex;gap:var(--s3);align-items:center;width:100%;text-align:left;padding:var(--s3);border-radius:var(--r);
   background:var(--surface-2);margin-bottom:var(--s3);transition:background .16s var(--ease),transform .16s var(--ease);}
 .pick:active{transform:scale(.985);}
@@ -503,8 +518,10 @@ details.sec[open] summary svg{transform:rotate(180deg);}
 .photo-grid img{width:100%;height:100%;object-fit:cover;}
 .photo-grid figcaption{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;font-size:10.5px;color:#fff;
   background:linear-gradient(to top,rgba(0,0,0,.6),transparent);font-weight:600;}
-@media(min-width:900px){
+@media(min-width:760px){
   .two-col{display:grid;grid-template-columns:1.05fr .95fr;gap:var(--s5);align-items:start;}
+}
+@media(min-width:900px){
   .tabbar{border-radius:0;}
   .sheet{max-width:560px;border-radius:26px;bottom:24px;left:50%;right:auto;transform:translate(-50%,calc(100% + 48px));}
   .sheet.show{transform:translate(-50%,0);visibility:visible;}
@@ -520,6 +537,50 @@ details.sec[open] summary svg{transform:rotate(180deg);}
   .btn.big{min-height:54px;}
   .trainbar{margin-bottom:6px;}
   .strip{padding:6px 6px 6px 14px;}
+}
+
+/* ---------- phone in landscape ----------
+   iPhone 17 on its side is ~874 x 402: wide, and very short. Everything
+   that stacks in portrait sits side by side here, the tab bar loses its
+   second line, and the notch side gets its inset back. */
+@media (orientation:landscape) and (max-height:560px){
+  #app{padding:calc(var(--safe-top) + 10px) calc(18px + var(--safe-right)) calc(74px + var(--safe-bot)) calc(18px + var(--safe-left));}
+  .topbar{margin-bottom:var(--s4);}
+  h1{font-size:24px;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start;}
+  .tabbar{grid-template-columns:repeat(5,1fr);padding:4px calc(6px + var(--safe-right)) calc(4px + var(--safe-bot)) calc(6px + var(--safe-left));}
+  .tabbar button{flex-direction:row;gap:7px;min-height:42px;font-size:12px;padding:4px 0;}
+  .tabbar button svg{width:19px;height:19px;}
+  .composer{bottom:calc(54px + var(--safe-bot));}
+  .toast{bottom:calc(66px + var(--safe-bot));}
+  /* the working exercise: picture on the left, the numbers and the button on the right */
+  .ec{display:grid;grid-template-columns:minmax(0,0.95fr) minmax(0,1.05fr);gap:0;align-items:stretch;
+    background:var(--surface);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--sh-2);}
+  .ec-media{aspect-ratio:auto;max-height:none;height:100%;min-height:190px;border-radius:0;}
+  .ec-media.noshot{aspect-ratio:auto;max-height:none;}
+  .ec-sheet{margin-top:0;border-radius:0;padding:var(--s4) var(--s4) var(--s3);overflow-y:auto;max-height:calc(100dvh - 150px);}
+  .bleed{margin-inline:0;}
+  .ec-title{font-size:22px;}
+  .trainbar{grid-template-columns:40px 1fr 40px;margin-bottom:2px;}
+  .trainbar h2{font-size:14px;color:var(--ink-3);}
+  .stripwrap{display:flex;align-items:center;gap:10px;}
+  .stripwrap .strip{flex:1;min-width:0;margin-bottom:0;padding:4px 6px 4px 12px;}
+  .strip-l > .num{font-size:17px;}
+  .stripwrap .cancelbtn{flex:0 0 auto;margin:0;min-height:36px;font-size:12.5px;}
+  .prog-track{margin:6px 0 8px;}
+  /* the rest screen reads across, not down */
+  .restview{flex-direction:row;flex-wrap:wrap;gap:var(--s5);padding:var(--s4) calc(18px + var(--safe-right)) calc(var(--s4) + var(--safe-bot)) calc(18px + var(--safe-left));}
+  .restview .ring{width:min(30vw,150px);}
+  .restview .ring .t{font-size:clamp(30px,7vw,40px);}
+  .restview .lab{width:100%;order:-1;}
+  .restview .nextup{flex:1 1 180px;text-align:left;}
+  .restview .ctrls{width:auto;flex:1 1 240px;max-width:none;}
+  .sheet{max-height:92dvh;}
+  .sheet-body{padding-left:calc(var(--s5) + var(--safe-left));padding-right:calc(var(--s5) + var(--safe-right));}
+  .durgrid{grid-template-columns:repeat(4,1fr);}
+  .photo-grid{grid-template-columns:repeat(6,1fr);}
+  .hero{padding:var(--s4);}
+  .chatlog{padding-bottom:var(--s4);}
 }
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:.01ms!important;transition-duration:.01ms!important;}
@@ -709,7 +770,8 @@ function clamp(n,a,b){ return Math.max(a,Math.min(b,n)); }
 function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 function el(id){ return document.getElementById(id); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function plural(n,w){ return n+" "+w+(n===1?"":"s"); }
+function plural(n,w){ return n+" "+word(w,n); }
+function word(w,n){ if(n===1) return w; return /(ch|sh|s|x|z)$/i.test(w)? w+"es" : /[^aeiou]y$/i.test(w)? w.slice(0,-1)+"ies" : w+"s"; }
 function fmtClock(sec){ sec=Math.max(0,Math.round(sec)); return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
 function kgTxt(w){ if(w==null||w==="") return ""; return (Math.round(w*10)/10)+" kg"; }
 function roundLoad(w){ const step = w<10 ? 0.5 : (w<30 ? 1.25 : 2.5); return Math.max(0, Math.round(w/step)*step); }
@@ -836,6 +898,7 @@ const ICO={
   neck:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="6" r="3"/><path d="M9 9.5c0 2-2.5 2.5-2.5 5M15 9.5c0 2 2.5 2.5 2.5 5M8 19h8"/></svg>',
   chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
   back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></svg>',
   pain:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l8.5 15h-17z"/><path d="M12 9.5v4M12 16.3v.2"/></svg>',
   pause:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="4" height="14" rx="1.5"/><rect x="13.5" y="5" width="4" height="14" rx="1.5"/></svg>',
@@ -3913,6 +3976,23 @@ function doDiscard(keepPlan){
   pushCoach(keepPlan? "Wiped. That one doesn't count. Start it properly."
                     : "Today cleared. Nothing logged.");
 }
+/* Cancel, from inside a running workout. Deliberately one tap to reach and
+   one confirmation to commit, because it removes sets that were logged. */
+function cancelWorkout(){
+  const w=W();
+  const lg=loggedOn(w.date);
+  openSheet("Cancel this workout?",
+    '<p class="muted">'+(lg.sets
+      ? plural(lg.sets,"set")+" logged today will be removed from your history"+
+        (lg.prs? " along with "+plural(lg.prs,"record") : "")+"."
+      : "Nothing has been logged yet, so nothing is lost.")+
+    ' A fresh '+esc(w.title||"session")+' takes its place, ready when you are.</p>'+
+    '<button class="btn danger" style="margin-top:20px" onclick="doDiscard(true)">'+
+      '<span class="lbl">Yes, cancel the workout</span></button>'+
+    '<button class="btn ghost" style="margin-top:10px" onclick="closeSheet()">'+
+      '<span class="lbl">Keep training</span></button>'+
+    '<p class="tiny dim" style="margin:14px 2px 0">You can undo this straight afterwards.</p>');
+}
 function deleteWorkout(){ stopSheet(); }
 
 /* Any day, not just today — from the calendar or from history. */
@@ -4133,11 +4213,14 @@ function sessionStrip(w){
   const where = w.state.phase==="prep"?"Warm-up"
               : w.state.phase==="cool"?"Cool-down"
               : (b? b.label+" · "+blockKind(b)+" · round "+w.state.r+" of "+b.rounds : "");
-  return '<div class="strip">'+
-      '<div class="strip-l"><span class="num" id="sessClock">'+fmtClock(sessionElapsed(w)/1000)+'</span>'+
-      '<span class="strip-sub">'+esc(where)+'</span></div>'+
-      pauseBtnHTML()+
-      '<button class="navbtn" onclick="sessionMenu()" aria-label="More">'+ICO.dots+'</button>'+
+  return '<div class="stripwrap">'+
+      '<div class="strip">'+
+        '<div class="strip-l"><span class="num" id="sessClock">'+fmtClock(sessionElapsed(w)/1000)+'</span>'+
+        '<span class="strip-sub">'+esc(where)+'</span></div>'+
+        pauseBtnHTML()+
+        '<button class="navbtn" onclick="sessionMenu()" aria-label="More">'+ICO.dots+'</button>'+
+      '</div>'+
+      '<button class="cancelbtn" onclick="cancelWorkout()">'+ICO.x+'Cancel workout</button>'+
     '</div>'+
     (isPaused(w)? '<div class="paused-note">Paused — the clock and every timer are stopped.</div>':'')+
     '<div class="prog-track"><span style="width:'+pct+'%"></span></div>';
@@ -4172,7 +4255,8 @@ function readyHTML(w){
     '<div class="btn-row" style="margin-top:14px">'+
       '<button class="btn sec sm" onclick="addExercise()">'+ICO.plus+'<span class="lbl">Add exercise</span></button>'+
       '<button class="btn sec sm" onclick="sessionMenu()">'+ICO.dots+'<span class="lbl">More</span></button>'+
-    '</div>';
+    '</div>'+
+    (UNDO?'<button class="btn ghost sm" style="margin-top:10px" onclick="undoLast()"><span class="lbl">Undo the cancelled workout</span></button>':'');
 }
 function planHTML(w){
   return '<div class="card">'+
@@ -4277,7 +4361,7 @@ function exerciseHTML(w,b,it){
   const editing = EDIT_OPEN===it.id;
   const repKey = it.time? "time":"reps";
   const repHTML = it.time? (it.time+' <small>s</small>') : (typeof it.reps==="number"? (it.reps+' <small>reps</small>') : esc(it.reps||""));
-  return '<div class="bleed"><div class="ec-media'+(mediaFor(it.ex)?'':' noshot')+'">'+mediaHTML(it.ex)+'</div>'+
+  return '<div class="bleed ec"><div class="ec-media'+(mediaFor(it.ex)?'':' noshot')+'">'+mediaHTML(it.ex)+'</div>'+
     '<div class="ec-sheet">'+
       '<div class="ec-strip">'+
         '<span class="lab">'+b.label+(b.items.indexOf(it)+1)+'</span>'+
