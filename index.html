@@ -267,6 +267,9 @@ textarea.txtin{min-height:88px;resize:vertical;line-height:1.5;}
 .linkbtn svg{width:15px;height:15px;}
 .cue .grow{display:block;}
 /* ---------- cues ---------- */
+.cue .warnico{color:var(--warn);flex:none;display:flex}
+.cue .warnico svg{width:20px;height:20px}
+.cue .chip{flex:none;align-self:center}
 .cue{display:flex;gap:10px;align-items:flex-start;background:var(--surface-2);border-radius:var(--r-sm);
   padding:12px 14px;margin-top:var(--s4);font-size:14.5px;color:var(--ink-2);line-height:1.45;}
 .cue svg{width:18px;height:18px;flex:0 0 18px;margin-top:1px;color:var(--ink-3);}
@@ -835,7 +838,7 @@ const DEFAULTS = {
     /* the timer runs itself, counts her in, and says what is next */
     autoTimer:true, voice:true,
     /* the phone must not go dark with the app open */
-    keepAwake:true,
+    keepAwake:true, wakeWarn:true,
     /* how hard the count-in and the finish beep hit — all the way up
        unless she turns it down */
     cueVolume:"max",
@@ -1071,18 +1074,46 @@ function clearCue(key){ delete CUE[key]; }
    iOS hands the lock back every time the page is hidden — a call, the home
    screen, the screen going dark — so we remember that we still want it and
    take it again on the way back. */
-let _wake=null, _wantWake=false;
+let _wake=null, _wantWake=false, _wakeWhy=null;
 async function holdScreen(on){
   if(on!=null) _wantWake=!!on;
+  const was=_wakeWhy;
   try{
     if(_wantWake && (!DB.prefs || DB.prefs.keepAwake!==false)){
-      if(_wake||!navigator.wakeLock) return;
-      if(document.visibilityState!=="visible") return;
-      _wake=await navigator.wakeLock.request("screen");
-      _wake.addEventListener("release",()=>{ _wake=null; });
+      if(_wake) return;
+      if(!navigator.wakeLock){ _wakeWhy="unsupported"; }
+      else if(document.visibilityState==="visible"){
+        _wake=await navigator.wakeLock.request("screen");
+        _wakeWhy=null;
+        _wake.addEventListener("release",()=>{ _wake=null; });
+      }
     } else if(_wake){ const l=_wake; _wake=null; await l.release(); }
-  }catch(e){ _wake=null; }
+  }catch(e){
+    _wake=null;
+    /* Low Power Mode is the common one: iOS simply refuses the lock, and
+       silently letting the screen die mid-set is the worst possible way to
+       tell her that. */
+    _wakeWhy=(e&&e.name==="NotAllowedError")? "blocked" : "failed";
+  }
+  if(_wakeWhy!==was && CUR==="train"){ try{ renderTrain(); }catch(e){} }
 }
+function screenHeld(){ return !!_wake; }
+function wakeTrouble(){
+  if(!DB.prefs || DB.prefs.keepAwake===false || DB.prefs.wakeWarn===false) return null;
+  if(_wake) return null;
+  if(_wakeWhy==="blocked")
+    return "Your phone is refusing to stay awake — that is almost always Low Power Mode. Turn it off, or set Auto-Lock to Never while you train.";
+  if(_wakeWhy==="unsupported")
+    return "This browser will not let the app hold the screen on. Add Train to your home screen, or set Auto-Lock to Never while you train.";
+  return null;
+}
+function wakeWarnHTML(){
+  const t=wakeTrouble(); if(!t) return "";
+  return '<div class="cue" style="margin:0 0 14px"><span class="warnico">'+ICO.info+'</span>'+
+    '<span class="grow">'+esc(t)+'</span>'+
+    '<button class="chip" onclick="hushWake()">Got it</button></div>';
+}
+function hushWake(){ DB.prefs.wakeWarn=false; save(); renderTrain(); }
 
 function beep(times){
   const n=times||1;
@@ -6553,7 +6584,7 @@ function paintTrain(){
   else if(!b||!it){ wrap.innerHTML=finishedHTML(w); return pos; }
   else body=exerciseHTML(w,b,it)+upNextHTML(w,b);
 
-  wrap.innerHTML=liveHead(w)+sessionStrip(w)+body;
+  wrap.innerHTML=liveHead(w)+sessionStrip(w)+wakeWarnHTML()+body;
   startTicking();
   preloadNext(w,b);
   return pos;
@@ -8447,7 +8478,14 @@ function boot(){
   try{ migrate(); }catch(e){ console.error("migrate",e); }
   try{ dailyNudge(); }catch(e){ console.error("nudge",e); }
   try{ probeDemos(); }catch(e){}
-  go("home",{force:true});
+  /* iOS evicts a PWA from memory whenever it feels like it — a call, a
+     photo, a few minutes on something else — and the app reloads from
+     scratch when she opens it again. Everything survives that (the state is
+     on disk and every clock is a timestamp, not a running count), but she
+     was being dropped on Home with a set timer ticking behind her. If a
+     session is live, she comes straight back to it. */
+  const live=(DB.sessions||{})[today()];
+  go(sessionLive(live)? "train" : "home", {force:true});
   holdScreen(true);
   if(DB.cloud && DB.cloud.on){ setTimeout(()=>{ cloudPush(true); },4000); }
   if("serviceWorker" in navigator){
@@ -8464,6 +8502,11 @@ function boot(){
   /* Some browsers only hand out the lock off the back of a tap. If the one
      above was refused, the first thing she touches gets it. */
   document.addEventListener("pointerdown",()=>{ holdScreen(true); },{passive:true});
+  /* The last word before the page is frozen or thrown away. save() is
+     debounced for the cloud, but the local write must not be. */
+  const flush=()=>{ try{ localStorage.setItem(STORE_KEY,JSON.stringify(DB)); idbSet(DB); }catch(e){} };
+  window.addEventListener("pagehide",flush);
+  document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") flush(); });
   DB._lastDay=today();
   window.addEventListener("error",e=>{ console.error("uncaught",e.message); });
 }

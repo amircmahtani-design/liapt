@@ -409,6 +409,33 @@ THE PHONE DOES NOT GO DARK
   browser would only give it out off the back of one. Turn it off under
   More -> Settings -> Session -> Keep the screen awake.
 
+  Two things beyond the lock make the app actually stay open:
+
+  SHE COMES BACK TO THE SET SHE WAS ON. iOS evicts a PWA from memory
+  whenever it feels like it — a call, a photo, a couple of minutes on
+  something else — and the app reloads from scratch. Nothing is lost when
+  that happens: the whole session, the logged sets, her position and even a
+  running set timer survive, because the state is written to disk and every
+  clock is a timestamp rather than a running count (a 60-second timer
+  reloaded two seconds in comes back with 57 left). But she was being
+  dropped on the Home screen with that timer ticking behind her. Now, if a
+  session is live, the app opens straight back into it.
+
+  IT WRITES BEFORE IT IS TAKEN AWAY. The local save is flushed on pagehide
+  and the moment the page is hidden, so nothing depends on a debounce
+  finishing before iOS freezes the page.
+
+  AND IT SAYS SO WHEN THE PHONE REFUSES. Low Power Mode makes iOS reject the
+  screen lock outright. That used to fail silently, which is the worst
+  possible way to find out — the screen just dies mid-set. A live session
+  now carries one line: "Your phone is refusing to stay awake — that is
+  almost always Low Power Mode. Turn it off, or set Auto-Lock to Never while
+  you train." with a Got it to silence it for good.
+
+  For the best result: add Train to the home screen rather than running it
+  in a Safari tab. Safari discards background tabs far more aggressively
+  than it does an installed app.
+
   If she does lock the phone by hand the clock is still right when she
   comes back — it always was, it is kept by timestamps — but the cues will
   not have sounded while it was off.
