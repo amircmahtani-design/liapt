@@ -833,6 +833,9 @@ const DEFAULTS = {
     autoTimer:true, voice:true,
     /* the phone must not go dark with the app open */
     keepAwake:true,
+    /* how hard the count-in and the finish beep hit — all the way up
+       unless she turns it down */
+    cueVolume:"max",
     /* how much of the programme is held still so it can be built on */
     build:"balanced",
     /* which week she is on: her own, mixed, or a bodybuilding split */
@@ -971,31 +974,73 @@ function closeSheet(){
 }
 function sheetOpen(){ return el("sheet").classList.contains("show"); }
 
-/* ---------- sound ---------- */
-let _audio=null;
-/* ---------- the sounds ----------
-   She should not have to look at the phone. Three ticks, a go, a swap and a
-   finish, each a different pitch so they are told apart without reading. */
+/* ---------- sound ----------
+   A phone speaker is small and she is at the far end of a gym with music
+   on. A quiet sine wave disappears. So the cues go through a compressor
+   and a soft clip, sit up in the 1-2 kHz band where both the speaker and
+   the ear are at their loudest, and are built from a square plus its
+   harmonics rather than a pure tone, which is what makes a beep carry. */
+let _audio=null, _bus=null, _lvl=null;
+/* The setting has to sit after the limiter. Put it in front and everything
+   is squashed back up to the same place and the dial does nothing. */
+const CUE_VOL={ normal:0.35, loud:0.78, max:1 };
+function cueLevel(){ const v=CUE_VOL[(DB.prefs&&DB.prefs.cueVolume)]; return v==null? CUE_VOL.max : v; }
+/* tanh: gets loud fast, then bends instead of tearing */
+function softClip(a){
+  const n=1024, c=new Float32Array(n);
+  for(let i=0;i<n;i++){ const x=i/(n-1)*2-1; c[i]=Math.tanh(x*1.25); }
+  return c;
+}
+function audioUp(){
+  if(_audio) return _audio;
+  const C=window.AudioContext||window.webkitAudioContext; if(!C) return null;
+  /* Safari 16.4+: play on the media channel, so the cues are heard at media
+     volume and the silent switch does not swallow them mid-set. */
+  try{ if(navigator.audioSession) navigator.audioSession.type="playback"; }catch(e){}
+  _audio=new C();
+  const comp=_audio.createDynamicsCompressor();
+  comp.threshold.value=-24; comp.knee.value=6; comp.ratio.value=14;
+  comp.attack.value=0.002; comp.release.value=0.12;
+  const make=_audio.createGain(); make.gain.value=5.5;
+  const clip=_audio.createWaveShaper(); clip.curve=softClip(_audio); clip.oversample="2x";
+  _lvl=_audio.createGain(); _lvl.gain.value=cueLevel();
+  _bus=_audio.createGain(); _bus.gain.value=1;
+  _bus.connect(comp); comp.connect(make); make.connect(clip); clip.connect(_lvl); _lvl.connect(_audio.destination);
+  return _audio;
+}
+function osc(a,into,type,f,lvl,t0,d){
+  const o=a.createOscillator(), v=a.createGain();
+  o.type=type; o.frequency.value=f; v.gain.value=lvl;
+  o.connect(v); v.connect(into); o.start(t0); o.stop(t0+d+0.05);
+}
 function tone(freq,dur,delay,vol){
   if(!(DB.prefs&&DB.prefs.sound)) return;
   try{
-    if(!_audio){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return; _audio=new C(); }
-    if(_audio.state==="suspended") _audio.resume();
-    const o=_audio.createOscillator(), g=_audio.createGain();
-    o.connect(g); g.connect(_audio.destination);
-    o.type="sine"; o.frequency.value=freq;
-    const t0=_audio.currentTime+(delay||0);
+    const a=audioUp(); if(!a) return;
+    if(a.state==="suspended") a.resume();
+    if(_lvl) _lvl.gain.value=cueLevel();
+    const t0=a.currentTime+(delay||0), d=dur||0.2;
+    const peak=Math.min(0.95,vol||0.3);
+    const g=a.createGain(); g.connect(_bus);
     g.gain.setValueAtTime(0.0001,t0);
-    g.gain.exponentialRampToValueAtTime(vol||0.22,t0+0.015);
-    g.gain.exponentialRampToValueAtTime(0.0001,t0+(dur||0.2));
-    o.start(t0); o.stop(t0+(dur||0.2)+0.05);
+    g.gain.exponentialRampToValueAtTime(peak,t0+0.006);   /* a hard edge cuts through */
+    g.gain.setValueAtTime(peak,t0+Math.max(0.02,d*0.7));
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+d);
+    osc(a,g,"square",freq,0.5,t0,d);
+    osc(a,g,"sine",freq*2,0.4,t0,d);
+    osc(a,g,"sine",freq*3,0.16,t0,d);
   }catch(e){}
 }
 function buzz(ms){ try{ if(DB.prefs.vibrate && navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
-function cueTick(){ tone(880,0.1,0,0.2); buzz(35); }                        /* three, two, one */
-function cueGo(){ tone(1319,0.3,0,0.26); buzz(90); }                        /* go */
-function cueSwap(){ tone(659,0.14,0,0.24); tone(880,0.2,0.18,0.24); buzz([60,60,60]); }
-function cueDone(){ tone(784,0.2,0,0.26); tone(1046,0.42,0.2,0.26); buzz([120,80,160]); }
+function cueTick(){ tone(1046,0.13,0,0.55); buzz(70); }                     /* three, two, one */
+function cueGo(){ tone(1568,0.3,0,0.62); buzz(140); }                       /* go */
+function cueSwap(){ tone(880,0.16,0,0.6); tone(1319,0.26,0.2,0.62); buzz([70,70,70]); }
+/* Time is up. Two short and one long, held and loud — she should never have
+   to look at the phone to know a set has ended. */
+function cueDone(){
+  tone(1319,0.15,0,0.62); tone(1568,0.15,0.19,0.62); tone(2093,0.6,0.38,0.7);
+  buzz([160,90,160,90,300]);
+}
 /* Spoken cues, so the one thing she would have looked up — what is next —
    is said out loud. Off in Settings if it grates. */
 function say(text){
@@ -1037,29 +1082,17 @@ async function holdScreen(on){
 }
 
 function beep(times){
-  if(!(DB.prefs&&DB.prefs.sound)) return;
-  try{
-    if(!_audio){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return; _audio=new C(); }
-    if(_audio.state==="suspended") _audio.resume();
-    const n=times||1;
-    for(let i=0;i<n;i++){
-      const o=_audio.createOscillator(), g=_audio.createGain();
-      o.connect(g); g.connect(_audio.destination); o.type="sine"; o.frequency.value= i===n-1?1046:784;
-      const t0=_audio.currentTime+i*0.26;
-      g.gain.setValueAtTime(0.0001,t0);
-      g.gain.exponentialRampToValueAtTime(0.22,t0+0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001,t0+0.3);
-      o.start(t0); o.stop(t0+0.34);
-    }
-  }catch(e){}
+  const n=times||1;
+  for(let i=0;i<n;i++) tone(i===n-1?2093:1568, i===n-1?0.5:0.18, i*0.26, 0.62);
+  buzz([120,80,160]);
 }
 /* Both the tones and the voice have to be woken by a tap, or iOS refuses
    the first one — which would be the count-in, the one that matters. Start
    workout and Pause are taps, so this runs there. */
 let _spoke=false;
 function unlockAudio(){
-  try{ if(!_audio){ const C=window.AudioContext||window.webkitAudioContext; if(C) _audio=new C(); }
-    if(_audio&&_audio.state==="suspended") _audio.resume(); }catch(e){}
+  try{ const a=audioUp(); if(a&&a.state==="suspended") a.resume(); }catch(e){}
+  try{ if(navigator.audioSession) navigator.audioSession.type="playback"; }catch(e){}
   try{
     if(!_spoke && window.speechSynthesis){
       _spoke=true;
@@ -7862,6 +7895,30 @@ function setBuild(k){
   coach().anchors={};            /* choose the held lifts again under the new rule */
   save(); closeSheet(); renderSettings(); toast(BUILD_MODES[k].label);
 }
+const CUE_LABEL={ normal:"Normal — quiet room", loud:"Loud — heard over gym music",
+                  max:"As loud as the phone goes" };
+function cueVolSheet(){
+  const cur=CUE_VOL[DB.prefs.cueVolume]?DB.prefs.cueVolume:"max";
+  const row=(k,nm,mt)=>'<button class="pick'+(cur===k?" on":"")+'" onclick="setCueVol(\''+k+'\')">'+
+    '<span class="grow"><span class="nm">'+nm+'</span><span class="mt">'+mt+'</span></span>'+
+    (cur===k?ICO.check:ICO.chev)+'</button>';
+  openSheet("How loud should the beeps be?",
+    row("normal","Normal","Quiet room, phone beside you")+
+    row("loud","Loud","Heard over gym music")+
+    row("max","As loud as it goes","Phone in a bag or across the room — the default"));
+}
+function setCueVol(k){
+  DB.prefs.cueVolume=k; save(); closeSheet(); renderSettings();
+  unlockAudio(); cueTick(); tone(1046,0.13,0.3,0.55); tone(1046,0.13,0.6,0.55); cueDone();
+}
+/* Let her hear exactly what a set ending sounds like, before she needs it. */
+function testCues(){
+  unlockAudio();
+  if(!(DB.prefs&&DB.prefs.sound)){ toast("Sound is switched off below"); return; }
+  cueTick(); tone(1046,0.13,1,0.55); tone(1046,0.13,2,0.55);
+  setTimeout(()=>{ cueDone(); say("Time"); },3000);
+  toast("Three, two, one…");
+}
 function toneSheet(){
   const cur=(DB.prefs.coachTone==="military")?"military":"warm";
   const row=(k,nm,mt)=>'<button class="pick'+(cur===k?" on":"")+'" onclick="setTone(\''+k+'\')">'+
@@ -7900,6 +7957,12 @@ function renderSettings(){
       '<div class="listrow"><span class="grow"><span class="k">Start timed moves for me</span>'+
         '<div class="tiny dim">Counts you in, runs the clock, calls the side change</div></span>'+
         sw("swAuto",DB.prefs.autoTimer!==false,"togglePref(\'autoTimer\',this)")+'</div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Beeps</span>'+
+        '<div class="tiny dim">'+esc(CUE_LABEL[DB.prefs.cueVolume]||CUE_LABEL.max)+'</div></span>'+
+        '<button class="chip" onclick="cueVolSheet()">Change</button></div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Hear the count-in</span>'+
+        '<div class="tiny dim">Three, two, one, and the end of a set</div></span>'+
+        '<button class="chip" onclick="testCues()">Play</button></div>'+
       '<div class="listrow"><span class="grow"><span class="k">Keep the screen awake</span>'+
         '<div class="tiny dim">The phone stays lit while the app is open</div></span>'+
         sw("swAwake",DB.prefs.keepAwake!==false,"togglePref(\'keepAwake\',this)")+'</div>'+

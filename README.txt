@@ -287,9 +287,34 @@ THE TIMER RUNS ITSELF
 
   More -> Settings -> Session:
     Start timed moves for me   the count-in and the automatic clock
+    Beeps                      how loud — normal, loud, as loud as it goes
+    Hear the count-in          plays three, two, one and the end of a set
     Keep the screen awake      the phone stays lit while the app is open
     Say what is next           the spoken side change and next movement
-  All three are on. The existing sound and vibration switches still apply.
+  The switches are on and the beeps ship all the way up. The existing sound
+  and vibration switches still apply.
+
+THE BEEPS ARE LOUD
+  A phone speaker is small and she is at the far end of a gym with music
+  on, so the cues were rebuilt to carry:
+
+    - they go through a compressor and a soft clip, which puts them near
+      the top of what the speaker can do without tearing
+    - they sit at 1-2 kHz, where both a phone speaker and the ear are at
+      their loudest, instead of down at 660-880 Hz
+    - each one is a square wave plus its harmonics, not a pure sine — that
+      is what makes a beep cut through rather than blend in
+    - on Safari 16.4+ the app claims the media channel, so the cues come
+      out at media volume and the silent switch does not swallow them
+
+  Measured on the rendered waveform: the countdown ticks went from -32 to
+  -7 dBFS and the end-of-set beep from -24 to -3.5 dBFS, with nothing
+  clipped. That is roughly five times and four times as loud.
+
+  The end of a set is now two short beeps and one long held one, with a
+  long vibration under it, so it is unmistakable even mid-effort. Settings
+  -> Beeps turns it down; Hear the count-in plays the whole thing so she
+  can set the volume before she needs it.
 
 THE PHONE DOES NOT GO DARK
   The screen is held awake the whole time the app is open, not only during
