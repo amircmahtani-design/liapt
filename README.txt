@@ -287,13 +287,31 @@ THE TIMER RUNS ITSELF
 
   More -> Settings -> Session:
     Start timed moves for me   the count-in and the automatic clock
+    Keep the screen awake      the phone stays lit while the app is open
     Say what is next           the spoken side change and next movement
-  Both are on. The existing sound and vibration switches still apply.
+  All three are on. The existing sound and vibration switches still apply.
 
-  The screen is also held awake while she is training, because iOS sleeps
-  the phone otherwise and the sound goes with it. If she locks it by hand
-  the clock is still right when she comes back — it always was, it is kept
-  by timestamps — but the cues will not have sounded while it was off.
+THE PHONE DOES NOT GO DARK
+  The screen is held awake the whole time the app is open, not only during
+  a live set — propped on a bench between rounds, on the floor during the
+  cool-down, sitting on the readiness questions. iOS hands the lock back
+  every time the page is hidden (a call, the home screen), so the app asks
+  for it again the moment she returns, and again on her first tap if the
+  browser would only give it out off the back of one. Turn it off under
+  More -> Settings -> Session -> Keep the screen awake.
+
+  If she does lock the phone by hand the clock is still right when she
+  comes back — it always was, it is kept by timestamps — but the cues will
+  not have sounded while it was off.
+
+SHE ALWAYS LANDS ON THE PICTURE
+  Every time she moves on — out of the warm-up, on to the next movement,
+  round two, the next block, into the cool-down — the page snaps to the top
+  of the card, where the photograph is. It snaps rather than glides: a
+  smooth scroll is still travelling when the next repaint replaces the page
+  under it, which is how she used to end up halfway down the up-next list.
+  When nothing has moved — the clock repainting, a warm-up move ticked off
+  — she is left exactly where she was, so she can read ahead in peace.
 
 THE WARM-UP AND THE COOL-DOWN
   Both now show the move she is on, full width, with its cue — not just a

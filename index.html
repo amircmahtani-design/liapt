@@ -831,6 +831,8 @@ const DEFAULTS = {
     sound:true, vibrate:true, cycleOn:true, coachTone:"warm",
     /* the timer runs itself, counts her in, and says what is next */
     autoTimer:true, voice:true,
+    /* the phone must not go dark with the app open */
+    keepAwake:true,
     /* how much of the programme is held still so it can be built on */
     build:"balanced",
     /* which week she is on: her own, mixed, or a bodybuilding split */
@@ -1017,16 +1019,20 @@ function cueCountdown(key,left){
   if(s===3||s===2||s===1) cueTick();
 }
 function clearCue(key){ delete CUE[key]; }
-/* Keep the screen awake while she is training, or iOS sleeps the phone and
-   the cues stop with it. */
-let _wake=null;
+/* Keep the screen awake the whole time the app is open, not just mid-set.
+   iOS hands the lock back every time the page is hidden — a call, the home
+   screen, the screen going dark — so we remember that we still want it and
+   take it again on the way back. */
+let _wake=null, _wantWake=false;
 async function holdScreen(on){
+  if(on!=null) _wantWake=!!on;
   try{
-    if(on){
+    if(_wantWake && (!DB.prefs || DB.prefs.keepAwake!==false)){
       if(_wake||!navigator.wakeLock) return;
+      if(document.visibilityState!=="visible") return;
       _wake=await navigator.wakeLock.request("screen");
       _wake.addEventListener("release",()=>{ _wake=null; });
-    } else if(_wake){ await _wake.release(); _wake=null; }
+    } else if(_wake){ const l=_wake; _wake=null; await l.release(); }
   }catch(e){ _wake=null; }
 }
 
@@ -5739,7 +5745,14 @@ function curItem(w){ const b=curBlock(w); return b? b.items[w.state.i]||null : n
 function doneKey(w,item){ return w.state.b+"-"+w.state.r+"-"+item.id; }
 function isDone(w,item){ return !!(w.state.done||{})[doneKey(w,item)]; }
 function itemLoad(it){ return it.forceKg? "kg" : ((EX(it.ex)||{}).load||"bw"); }
-function toTop(){ try{ window.scrollTo({top:0,behavior:"smooth"}); }catch(e){} }
+/* Snap, don't glide. A smooth scroll is still travelling when the next
+   render replaces the page under it, and she lands halfway down the list
+   instead of on the picture. */
+function toTop(){
+  const jump=()=>{ try{ window.scrollTo({top:0,behavior:"instant"}); }catch(e){ try{ window.scrollTo(0,0); }catch(_){} } };
+  jump();
+  try{ requestAnimationFrame(jump); }catch(e){}
+}
 function blockKind(b){ return b.flow? "Flow" : (b.items.length<2? "Straight sets" : (b.items.length>2?"Circuit":"Superset")); }
 
 /* ---------- the one ticker ---------- */
@@ -5748,7 +5761,7 @@ function startTicking(){
   TICK=setInterval(tick,250);
   tick();
 }
-function stopTicking(){ if(TICK){ clearInterval(TICK); TICK=null; } holdScreen(false); }
+function stopTicking(){ if(TICK){ clearInterval(TICK); TICK=null; } }
 function tick(){
   const w=(DB.sessions||{})[today()];
   if(!w||!w.state){ return; }
@@ -5945,7 +5958,6 @@ function startWorkout(){
 function skipPrep(){ const w=W(); w.state.phase="work"; save(); renderTrain(); toTop(); }
 function finishSession(){
   const w=W();
-  holdScreen(false);
   completeSession(w);
   pushCoach(pickLine("done",parseISO(w.date).getDate()));
   stopTicking(); renderTrain(); beep(3); toTop();
@@ -6230,11 +6242,33 @@ function toggleTiming(id){
 }
 
 /* ---------- the screen ---------- */
+/* Where she is in the session, as a string. When it changes she has moved
+   on to something new and belongs at the top of the card, looking at the
+   picture. When it hasn't — a timer repaint, a warm-up tick — she stays
+   exactly where she was. */
+let TRAIN_AT=null;
+function trainPos(w){
+  if(!w||!w.state) return "none";
+  if(w.rest||w.deleted) return "rest";
+  if(w.state.finished) return "finished";
+  if(w.state.phase==="ready"||!w.state.clock.startedAt) return "ready";
+  return [w.state.phase,w.state.b,w.state.r,w.state.i].join("/");
+}
 function renderTrain(){
+  const was=window.scrollY||0;
+  const pos=paintTrain();
+  if(pos!==TRAIN_AT){ TRAIN_AT=pos; toTop(); }
+  else if(was && (window.scrollY||0)!==was){
+    try{ window.scrollTo({top:was,behavior:"instant"}); }catch(e){ try{ window.scrollTo(0,was); }catch(_){} }
+  }
+}
+function paintTrain(){
   const d=today();
   let w=(DB.sessions||{})[d];
   if(!w) w=sessionFor(d,true);
   const wrap=el("trainWrap");
+
+  const pos=trainPos(w);
 
   if(w.rest || w.deleted){
     stopTicking();
@@ -6247,21 +6281,22 @@ function renderTrain(){
         '<button class="btn sec" onclick="startMobility()"><span class="lbl">Mobility flow</span></button>'+
         (w.deleted?'<button class="btn" onclick="rebuildWorkout()"><span class="lbl">Rebuild today</span></button>':'')+
       '</div>'+(UNDO?'<button class="btn ghost sm" style="margin-top:10px" onclick="undoLast()"><span class="lbl">Undo</span></button>':'')+'</div>';
-    return;
+    return pos;
   }
-  if(w.state.finished){ stopTicking(); wrap.innerHTML=finishedHTML(w); return; }
-  if(w.state.phase==="ready" || !w.state.clock.startedAt){ stopTicking(); wrap.innerHTML=readyHTML(w); return; }
+  if(w.state.finished){ stopTicking(); wrap.innerHTML=finishedHTML(w); return pos; }
+  if(w.state.phase==="ready" || !w.state.clock.startedAt){ stopTicking(); wrap.innerHTML=readyHTML(w); return pos; }
 
   const b=curBlock(w), it=curItem(w);
   let body;
   if(w.state.phase==="prep") body=prepHTML(w);
   else if(w.state.phase==="cool") body=coolHTML(w);
-  else if(!b||!it){ wrap.innerHTML=finishedHTML(w); return; }
+  else if(!b||!it){ wrap.innerHTML=finishedHTML(w); return pos; }
   else body=exerciseHTML(w,b,it)+upNextHTML(w,b);
 
   wrap.innerHTML=liveHead(w)+sessionStrip(w)+body;
   startTicking();
   preloadNext(w,b);
+  return pos;
 }
 
 /* Only ever two images in flight: the one on screen and the one after it. */
@@ -7865,6 +7900,9 @@ function renderSettings(){
       '<div class="listrow"><span class="grow"><span class="k">Start timed moves for me</span>'+
         '<div class="tiny dim">Counts you in, runs the clock, calls the side change</div></span>'+
         sw("swAuto",DB.prefs.autoTimer!==false,"togglePref(\'autoTimer\',this)")+'</div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Keep the screen awake</span>'+
+        '<div class="tiny dim">The phone stays lit while the app is open</div></span>'+
+        sw("swAwake",DB.prefs.keepAwake!==false,"togglePref(\'keepAwake\',this)")+'</div>'+
       '<div class="listrow"><span class="grow"><span class="k">Say what is next</span>'+
         '<div class="tiny dim">Speaks the next movement and the side change out loud</div></span>'+
         sw("swVoice",DB.prefs.voice!==false,"togglePref(\'voice\',this)")+'</div>'+
@@ -7930,7 +7968,8 @@ function renderSettings(){
     '<p class="tiny dim" style="text-align:center">Train '+VERSION+'</p>'+
   '</div>';
 }
-function togglePref(k,elm){ DB.prefs[k]=!DB.prefs[k]; elm.classList.toggle("on",DB.prefs[k]); save(); }
+function togglePref(k,elm){ DB.prefs[k]=!DB.prefs[k]; elm.classList.toggle("on",DB.prefs[k]); save();
+  if(k==="keepAwake") holdScreen(DB.prefs[k]); }
 function toggleCloudOn(elm){ DB.cloud.on=!DB.cloud.on; elm.classList.toggle("on",DB.cloud.on); save(); if(DB.cloud.on) cloudPush(false); }
 function saveAI(){
   DB.ai.key=(el("setKey").value||"").trim();
@@ -8041,17 +8080,22 @@ function boot(){
   try{ dailyNudge(); }catch(e){ console.error("nudge",e); }
   try{ probeDemos(); }catch(e){}
   go("home",{force:true});
+  holdScreen(true);
   if(DB.cloud && DB.cloud.on){ setTimeout(()=>{ cloudPush(true); },4000); }
   if("serviceWorker" in navigator){
     window.addEventListener("load",()=>{ navigator.serviceWorker.register("sw.js").catch(()=>{}); });
   }
   document.addEventListener("visibilitychange",()=>{
     if(document.visibilityState==="visible"){
+      holdScreen(true);                      /* iOS took it back while we were away */
       if(today()!==(DB._lastDay||today())){ DB._lastDay=today(); migrate(); }
       if(CUR==="train") renderTrain();
       else if(CUR==="home") renderHome();
     }
   });
+  /* Some browsers only hand out the lock off the back of a tap. If the one
+     above was refused, the first thing she touches gets it. */
+  document.addEventListener("pointerdown",()=>{ holdScreen(true); },{passive:true});
   DB._lastDay=today();
   window.addEventListener("error",e=>{ console.error("uncaught",e.message); });
 }
