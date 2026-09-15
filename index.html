@@ -129,6 +129,12 @@ p{margin:0;text-wrap:pretty;}
 .btn[disabled]{opacity:.42;pointer-events:none;}
 .btn svg{width:19px;height:19px;flex:0 0 auto;}
 .btn.loading{pointer-events:none;}
+/* a countdown you can read without leaning in */
+.btn.running{background:var(--ink);color:#fff;border-color:transparent;
+  box-shadow:0 1px 2px rgba(20,26,45,.2),0 10px 22px -12px rgba(20,26,45,.5);}
+.btn.running svg{color:#fff;}
+.btn.running .lbl{font-size:30px;font-weight:600;letter-spacing:-.03em;}
+.btn.running small{font-size:12px;font-weight:600;opacity:.65;margin-left:8px;text-transform:uppercase;letter-spacing:.06em;}
 .btn.loading .lbl{opacity:.55;}
 .btn-row{display:flex;gap:var(--s3);}
 .btn-row .btn{flex:1;}
@@ -823,6 +829,8 @@ const DEFAULTS = {
        not a full rest — that is the whole point of pairing them. */
     rest: { superset:20, round:75, block:100, straight:75 },
     sound:true, vibrate:true, cycleOn:true, coachTone:"warm",
+    /* the timer runs itself, counts her in, and says what is next */
+    autoTimer:true, voice:true,
     /* how much of the programme is held still so it can be built on */
     build:"balanced",
     /* which week she is on: her own, mixed, or a bodybuilding split */
@@ -963,6 +971,65 @@ function sheetOpen(){ return el("sheet").classList.contains("show"); }
 
 /* ---------- sound ---------- */
 let _audio=null;
+/* ---------- the sounds ----------
+   She should not have to look at the phone. Three ticks, a go, a swap and a
+   finish, each a different pitch so they are told apart without reading. */
+function tone(freq,dur,delay,vol){
+  if(!(DB.prefs&&DB.prefs.sound)) return;
+  try{
+    if(!_audio){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return; _audio=new C(); }
+    if(_audio.state==="suspended") _audio.resume();
+    const o=_audio.createOscillator(), g=_audio.createGain();
+    o.connect(g); g.connect(_audio.destination);
+    o.type="sine"; o.frequency.value=freq;
+    const t0=_audio.currentTime+(delay||0);
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(vol||0.22,t0+0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+(dur||0.2));
+    o.start(t0); o.stop(t0+(dur||0.2)+0.05);
+  }catch(e){}
+}
+function buzz(ms){ try{ if(DB.prefs.vibrate && navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
+function cueTick(){ tone(880,0.1,0,0.2); buzz(35); }                        /* three, two, one */
+function cueGo(){ tone(1319,0.3,0,0.26); buzz(90); }                        /* go */
+function cueSwap(){ tone(659,0.14,0,0.24); tone(880,0.2,0.18,0.24); buzz([60,60,60]); }
+function cueDone(){ tone(784,0.2,0,0.26); tone(1046,0.42,0.2,0.26); buzz([120,80,160]); }
+/* Spoken cues, so the one thing she would have looked up — what is next —
+   is said out loud. Off in Settings if it grates. */
+function say(text){
+  if(!(DB.prefs&&DB.prefs.voice)) return;
+  try{
+    if(!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(String(text));
+    u.rate=1.05; u.pitch=1; u.volume=1;
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+/* Fire a cue once per whole second, however often the painter runs. */
+let CUE={};
+function cueCountdown(key,left){
+  const s=Math.ceil(left-0.08);
+  const prev=CUE[key];
+  if(prev===s) return;
+  CUE[key]=s;
+  if(prev==null) return;                 /* the first paint is not a tick */
+  if(s===3||s===2||s===1) cueTick();
+}
+function clearCue(key){ delete CUE[key]; }
+/* Keep the screen awake while she is training, or iOS sleeps the phone and
+   the cues stop with it. */
+let _wake=null;
+async function holdScreen(on){
+  try{
+    if(on){
+      if(_wake||!navigator.wakeLock) return;
+      _wake=await navigator.wakeLock.request("screen");
+      _wake.addEventListener("release",()=>{ _wake=null; });
+    } else if(_wake){ await _wake.release(); _wake=null; }
+  }catch(e){ _wake=null; }
+}
+
 function beep(times){
   if(!(DB.prefs&&DB.prefs.sound)) return;
   try{
@@ -5666,7 +5733,7 @@ function startTicking(){
   TICK=setInterval(tick,250);
   tick();
 }
-function stopTicking(){ if(TICK){ clearInterval(TICK); TICK=null; } }
+function stopTicking(){ if(TICK){ clearInterval(TICK); TICK=null; } holdScreen(false); }
 function tick(){
   const w=(DB.sessions||{})[today()];
   if(!w||!w.state){ return; }
@@ -5674,6 +5741,7 @@ function tick(){
   if(c) c.textContent=fmtClock(sessionElapsed(w)/1000);
   paintRest(w);
   paintWork(w);
+  maybeAutoStart(w);
 }
 
 /* ---------- pause and resume ---------- */
@@ -5692,10 +5760,14 @@ function togglePause(){
     if(w.state.work && w.state.work.left!=null){
       w.state.work.endsAt=Date.now()+w.state.work.left*1000; w.state.work.left=null;
     }
+    if(w.state.lead && w.state.lead.left!=null){
+      w.state.lead.endsAt=Date.now()+w.state.lead.left*1000; w.state.lead.left=null;
+    }
   } else {
     c.pausedAt=Date.now();
     if(w.state.rest) w.state.rest.left=Math.max(0,(w.state.rest.endsAt-Date.now())/1000);
     if(w.state.work) w.state.work.left=Math.max(0,(w.state.work.endsAt-Date.now())/1000);
+    if(w.state.lead) w.state.lead.left=Math.max(0,(w.state.lead.endsAt-Date.now())/1000);
   }
   save(); renderTrain();
 }
@@ -5708,6 +5780,8 @@ function pauseBtnHTML(){
 /* ---------- rest ---------- */
 function beginRest(kind,seconds,nextName,label){
   const w=W();
+  clearCue("rest"); clearCue("work"); clearCue("lead");
+  w.state.lead=null;
   if(!seconds){ w.state.rest=null; save(); renderTrain(); return; }
   w.state.rest={ kind, total:seconds, endsAt:Date.now()+seconds*1000,
                  left: isPaused(w)? seconds : null, next:nextName||"", label:label||"Rest" };
@@ -5729,7 +5803,7 @@ function bumpRest(d){
 }
 function endRest(){
   const w=W();
-  w.state.rest=null; save(); renderTrain();
+  w.state.rest=null; clearCue("rest"); save(); renderTrain();
 }
 function paintRest(w){
   const ov=el("restOverlay");
@@ -5743,43 +5817,111 @@ function paintRest(w){
   arc.style.strokeDashoffset=String(C*(1-clamp(left/(r.total||1),0,1)));
   const pb=el("restPause");
   if(pb) pb.innerHTML=(isPaused(w)?ICO.play:ICO.pause)+'<span>'+(isPaused(w)?"Resume":"Pause")+'</span>';
-  if(left<=0.2 && !isPaused(w)){ alertDone(); endRest(); }
+  if(!isPaused(w)) cueCountdown("rest",left);
+  if(left<=0.2 && !isPaused(w)){
+    clearCue("rest");
+    alertDone();
+    if(r.next) say("Next. "+r.next);
+    endRest();
+  }
 }
-function alertDone(){
-  beep(2);
-  try{ if(DB.prefs.vibrate && navigator.vibrate) navigator.vibrate([120,80,120]); }catch(e){}
-}
+function alertDone(){ cueDone(); }
 
 /* ---------- timed exercises ---------- */
-function startWork(id){
+/* ---------- the working timer ----------
+   It counts her in, runs itself, calls the side change, and moves on. The
+   only reason to look at the phone is to see the picture. */
+const LEAD_SECS = 5;
+function startWork(id,opts){
   const w=W(), f=findItem(w,id); if(!f) return;
   unlockAudio();
-  if(w.state.work && w.state.work.itemId===id){ w.state.work=null; save(); renderTrain(); return; }
+  /* tapping a running timer stops it, and stops it starting itself again */
+  if(!(opts&&opts.auto) && (w.state.work||w.state.lead) &&
+     ((w.state.work&&w.state.work.itemId===id)||(w.state.lead&&w.state.lead.itemId===id))){
+    w.state.work=null; w.state.lead=null;
+    f.item.noAuto=true;
+    clearCue("work"); clearCue("lead");
+    save(); renderTrain(); return;
+  }
   const secs=f.item.time||30;
-  w.state.work={ itemId:id, total:secs, endsAt:Date.now()+secs*1000, left:isPaused(w)?secs:null };
+  w.state.lead=null; clearCue("lead"); clearCue("work");
+  w.state.work={ itemId:id, total:secs, side:1, endsAt:Date.now()+secs*1000, left:isPaused(w)?secs:null };
+  if(!(opts&&opts.quiet)) cueGo();
   save(); renderTrain();
+}
+/* A short count-in so she is not caught halfway into position. */
+function leadIn(id){
+  const w=W(), f=findItem(w,id); if(!f) return;
+  w.state.lead={ itemId:id, total:LEAD_SECS, endsAt:Date.now()+LEAD_SECS*1000,
+                 left:isPaused(w)?LEAD_SECS:null };
+  clearCue("lead");
+  save();
+}
+function leadLeft(w){
+  const k=w.state.lead; if(!k) return 0;
+  if(k.left!=null) return k.left;
+  return Math.max(0,(k.endsAt-Date.now())/1000);
 }
 function workLeft(w){
   const k=w.state.work; if(!k) return 0;
   if(k.left!=null) return k.left;
   return Math.max(0,(k.endsAt-Date.now())/1000);
 }
+/* Start the clock for a timed movement the moment it comes up, unless she
+   has turned that off or stopped this one by hand. */
+function maybeAutoStart(w){
+  if(DB.prefs.autoTimer===false) return;
+  if(w.state.phase!=="work" || w.state.rest || isPaused(w)) return;
+  if(w.state.work || w.state.lead) return;
+  const it=curItem(w);
+  if(!it || !it.time || it.noAuto || isDone(w,it)) return;
+  leadIn(it.id);
+}
 function paintWork(w){
   const b=el("workBtn"); if(!b) return;
-  const k=w.state.work;
   const it=curItem(w);
-  if(!k||!it||k.itemId!==it.id){
-    b.innerHTML=ICO.play+'<span class="lbl">Start '+(it&&it.time?it.time:0)+'s</span>';
+  if(!it){ return; }
+  /* counting her in */
+  if(w.state.lead && w.state.lead.itemId===it.id){
+    const l=leadLeft(w);
+    b.classList.add("running");
+    b.innerHTML='<span class="lbl">Get ready · '+Math.max(0,Math.ceil(l))+'</span>';
+    if(!isPaused(w)) cueCountdown("lead",l);
+    if(l<=0.15 && !isPaused(w)){
+      w.state.lead=null; clearCue("lead");
+      startWork(it.id,{auto:true});
+    }
+    return;
+  }
+  const k=w.state.work;
+  if(!k || k.itemId!==it.id){
+    b.classList.remove("running");
+    b.innerHTML=ICO.play+'<span class="lbl">Start '+(it.time||0)+'s</span>';
     return;
   }
   const left=workLeft(w);
-  b.innerHTML=(isPaused(w)?ICO.play:ICO.pause)+'<span class="lbl num">'+fmtClock(left)+'</span>';
-  if(left<=0.2 && !isPaused(w)){ w.state.work=null; alertDone(); completeItem(it.id); }
+  b.classList.add("running");
+  const sideTag = it.side? ('<small>'+(k.side===2?"second side":"first side")+'</small>') : '';
+  b.innerHTML=(isPaused(w)?ICO.play:ICO.pause)+'<span class="lbl num">'+fmtClock(left)+'</span>'+sideTag;
+  if(!isPaused(w)) cueCountdown("work",left);
+  if(left<=0.2 && !isPaused(w)){
+    /* "each side" means two goes at it, with a call in between */
+    if(it.side && k.side===1){
+      clearCue("work");
+      w.state.work={ itemId:it.id, total:k.total, side:2,
+                     endsAt:Date.now()+k.total*1000, left:null };
+      cueSwap(); say("Swap sides");
+      save(); renderTrain(); return;
+    }
+    w.state.work=null; clearCue("work");
+    alertDone();
+    completeItem(it.id);
+  }
 }
 
 /* ---------- starting and finishing ---------- */
 function startWorkout(){
-  const w=W(); unlockAudio();
+  const w=W(); unlockAudio(); holdScreen(true);
   w.state.clock.startedAt=w.state.clock.startedAt||Date.now();
   w.state.clock.pausedAt=null;
   w.state.phase=(w.prep&&w.prep.length)?"prep":"work";
@@ -5788,6 +5930,7 @@ function startWorkout(){
 function skipPrep(){ const w=W(); w.state.phase="work"; save(); renderTrain(); toTop(); }
 function finishSession(){
   const w=W();
+  holdScreen(false);
   completeSession(w);
   pushCoach(pickLine("done",parseISO(w.date).getDate()));
   stopTicking(); renderTrain(); beep(3); toTop();
@@ -5983,6 +6126,7 @@ function advance(w,b){
 function skipItem(){
   const w=W(), b=curBlock(w); if(!b) return;
   const it=curItem(w); if(!it) return;
+  w.state.lead=null; clearCue("lead"); clearCue("work");
   w.state.done=w.state.done||{};
   w.state.done[doneKey(w,it)]={skipped:true,at:Date.now()};
   w.state.work=null;
@@ -7703,6 +7847,12 @@ function renderSettings(){
       '<div class="listrow"><span class="grow"><span class="k">Coach\'s voice</span>'+
         '<div class="tiny dim">'+((DB.prefs.coachTone==="military")?"Direct — brief and accountable":"Warm — encouraging and concise")+'</div></span>'+
         '<button class="chip" onclick="toneSheet()">Change</button></div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Start timed moves for me</span>'+
+        '<div class="tiny dim">Counts you in, runs the clock, calls the side change</div></span>'+
+        sw("swAuto",DB.prefs.autoTimer!==false,"togglePref(\'autoTimer\',this)")+'</div>'+
+      '<div class="listrow"><span class="grow"><span class="k">Say what is next</span>'+
+        '<div class="tiny dim">Speaks the next movement and the side change out loud</div></span>'+
+        sw("swVoice",DB.prefs.voice!==false,"togglePref(\'voice\',this)")+'</div>'+
       '<div class="listrow"><span class="k">Sound on the timers</span>'+sw("swSound",DB.prefs.sound,"togglePref('sound',this)")+'</div>'+
       '<div class="listrow"><span class="k">Vibration</span>'+sw("swVib",DB.prefs.vibrate,"togglePref('vibrate',this)")+'</div>'+
       '<div class="listrow"><span class="k">Cycle tracking</span>'+sw("swCycle",DB.prefs.cycleOn,"togglePref('cycleOn',this)")+'</div>'+
@@ -7861,6 +8011,8 @@ function migrate(){
     if(!t.state.clock) t.state.clock={startedAt:null,pausedMs:0,pausedAt:null};
     if(t.state.rest && t.state.rest.left==null && t.state.rest.endsAt<=Date.now()) t.state.rest=null;
     if(t.state.work && t.state.work.left==null && t.state.work.endsAt<=Date.now()) t.state.work=null;
+    /* a count-in that ran out while the app was closed just starts again */
+    if(t.state.lead && (t.state.lead.left==null && t.state.lead.endsAt<=Date.now())) t.state.lead=null;
     if(!t.state.phase) t.state.phase = t.state.clock.startedAt? "work":"ready";
   }
   /* Trim the store so it never outgrows a Firestore document. */

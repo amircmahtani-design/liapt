@@ -265,6 +265,36 @@ THE PHONE AND THE IPAD
   two-column home and the same side-by-side working set. Pinch-zoom works
   again.
 
+THE TIMER RUNS ITSELF
+  A timed movement used to sit there waiting to be tapped, count down in
+  silence, and only beep at the end. Now she never has to look at it.
+
+    It counts her in       five seconds, with a tick at three, two and one
+                           and a higher note on go, so she can get into
+                           position without watching.
+    It runs itself         the clock starts the moment the movement comes up.
+    It counts her out      a tick at three, two and one, then a two-note
+                           finish, and it logs the set and moves on.
+    "Each side" means two  a 30-second side plank now runs 30 seconds, calls
+                           "Swap sides" out loud, and runs 30 more. It used
+                           to run once and stop.
+    The rest does it too   the rest clock counts her back in and says the
+                           next movement by name.
+
+  The countdown is large and white on black, readable at arm's length.
+  Tapping it stops it, and it will not restart itself until the next
+  movement.
+
+  More -> Settings -> Session:
+    Start timed moves for me   the count-in and the automatic clock
+    Say what is next           the spoken side change and next movement
+  Both are on. The existing sound and vibration switches still apply.
+
+  The screen is also held awake while she is training, because iOS sleeps
+  the phone otherwise and the sound goes with it. If she locks it by hand
+  the clock is still right when she comes back — it always was, it is kept
+  by timestamps — but the cues will not have sounded while it was off.
+
 THE WARM-UP AND THE COOL-DOWN
   Both now show the move she is on, full width, with its cue — not just a
   thumbnail. Tick it and the picture moves to the next one. Tapping any name
