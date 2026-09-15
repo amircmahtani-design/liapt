@@ -1047,8 +1047,23 @@ function beep(times){
     }
   }catch(e){}
 }
-function unlockAudio(){ try{ if(!_audio){ const C=window.AudioContext||window.webkitAudioContext; if(C) _audio=new C(); }
-  if(_audio&&_audio.state==="suspended") _audio.resume(); }catch(e){} }
+/* Both the tones and the voice have to be woken by a tap, or iOS refuses
+   the first one — which would be the count-in, the one that matters. Start
+   workout and Pause are taps, so this runs there. */
+let _spoke=false;
+function unlockAudio(){
+  try{ if(!_audio){ const C=window.AudioContext||window.webkitAudioContext; if(C) _audio=new C(); }
+    if(_audio&&_audio.state==="suspended") _audio.resume(); }catch(e){}
+  try{
+    if(!_spoke && window.speechSynthesis){
+      _spoke=true;
+      /* a silent utterance, purely to open the door */
+      const u=new SpeechSynthesisUtterance(" ");
+      u.volume=0; u.rate=2;
+      window.speechSynthesis.speak(u);
+    }
+  }catch(e){}
+}
 
 function paintSlider(s){ const min=+s.min||0,max=+s.max||10; s.style.setProperty("--pct",((s.value-min)/(max-min)*100)+"%"); }
 
