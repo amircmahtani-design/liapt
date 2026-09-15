@@ -425,12 +425,27 @@ THE PHONE DOES NOT GO DARK
   and the moment the page is hidden, so nothing depends on a debounce
   finishing before iOS freezes the page.
 
+  IT TAKES THE LOCK BACK IF THE SYSTEM GRABS IT. The lock can be revoked
+  without the page ever being hidden, so while a session is live the ticker
+  re-asks every ten seconds rather than waiting for her to touch something.
+
   AND IT SAYS SO WHEN THE PHONE REFUSES. Low Power Mode makes iOS reject the
   screen lock outright. That used to fail silently, which is the worst
   possible way to find out — the screen just dies mid-set. A live session
   now carries one line: "Your phone is refusing to stay awake — that is
-  almost always Low Power Mode. Turn it off, or set Auto-Lock to Never while
-  you train." with a Got it to silence it for good.
+  almost always Low Power Mode, which also forces Auto-Lock down to 30
+  seconds. Turn it off in Settings → Battery." with a Got it to silence it.
+
+  That wording matters: when Low Power Mode is on, iOS greys the Auto-Lock
+  setting out and pins it at 30 seconds, so telling her to change Auto-Lock
+  would be telling her to do something the phone will not let her do. The
+  only fix in that state is turning Low Power Mode off.
+
+  AUTO-LOCK, FOR THE RECORD. When the lock is working, Auto-Lock is
+  irrelevant — the screen does not sleep at all during a session, whatever
+  it is set to. It only matters as a fallback for when the lock is refused,
+  and iPhone's longest setting short of Never is 5 minutes, which is longer
+  than any rest the app prescribes.
 
   For the best result: add Train to the home screen rather than running it
   in a Safari tab. Safari discards background tabs far more aggressively

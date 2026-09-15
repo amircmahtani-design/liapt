@@ -1102,9 +1102,9 @@ function wakeTrouble(){
   if(!DB.prefs || DB.prefs.keepAwake===false || DB.prefs.wakeWarn===false) return null;
   if(_wake) return null;
   if(_wakeWhy==="blocked")
-    return "Your phone is refusing to stay awake — that is almost always Low Power Mode. Turn it off, or set Auto-Lock to Never while you train.";
+    return "Your phone is refusing to stay awake — that is almost always Low Power Mode, which also forces Auto-Lock down to 30 seconds. Turn it off in Settings → Battery.";
   if(_wakeWhy==="unsupported")
-    return "This browser will not let the app hold the screen on. Add Train to your home screen, or set Auto-Lock to Never while you train.";
+    return "This browser will not let the app hold the screen on. Add Train to your home screen, and set Auto-Lock to 5 minutes or Never in Settings → Display & Brightness.";
   return null;
 }
 function wakeWarnHTML(){
@@ -6061,7 +6061,14 @@ function tick(){
   paintRest(w);
   paintWork(w);
   maybeAutoStart(w);
+  /* The system can take the lock back without the page ever being hidden.
+     While she is actually training, ask for it again rather than waiting
+     for her to touch something. */
+  if(!screenHeld() && !w.state.finished && Date.now()-_wakeTry>10000){
+    _wakeTry=Date.now(); holdScreen(true);
+  }
 }
+let _wakeTry=0;
 
 /* ---------- pause and resume ---------- */
 function togglePause(){
