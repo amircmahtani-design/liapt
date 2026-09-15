@@ -798,6 +798,9 @@ const PROFILE_DEFAULT = {
   place:"Dubai home gym",
   goals:["Build and shape glutes","Strengthen and define the back","Visible abdominal definition",
          "Pelvic and trunk stability","Stronger and more defined at the same weight","Train without neck pain"],
+  /* The same thing again, in a shape the engine can act on rather than just
+     read out to the AI. Ordered: first is what the programme is really for. */
+  physique:{ priorities:["glutes","back","core"], lean:"recomp" },
   avoid:"No disproportionately large upper body. Strength and shape, not size up top.",
   likes:["Deadlift","Push-up","Chest Press","Cable Row","Resistance bands"],
   sessionMins:60, shortMins:20, daysPerWeek:5,
@@ -2958,6 +2961,57 @@ function slotsFor(plan,variant){
   }));
 }
 
+/* category -> how much it serves the body she is building, 0..1 */
+function catAim(){
+  const out={};
+  physique().priorities.forEach((k,i)=>{
+    const f=AIM_WEIGHT[i]||0.3;
+    Object.keys(SHAPE[k].week).forEach(cat=>{ out[cat]=Math.max(out[cat]||0,f); });
+  });
+  return out;
+}
+/* ---------- point the day at the body she wants ----------
+   Choosing a better exercise for a slot is not enough on its own: if the
+   template gives a day one pull slot, a back goal still only gets one pull.
+   So a slot or two gets re-pointed at what she is building. The day stays
+   hers — never an anchor, never more than two, never the last slot of the
+   last block (the weekly balance check needs it), and nothing at all on a
+   day that already serves the goal. */
+function aimSlots(sb,ctx){
+  const aim=catAim();
+  const wanted=Object.keys(aim).sort((a,b)=>aim[b]-aim[a]);
+  if(!wanted.length || !sb.length) return sb;
+  const all=sb.flatMap((b,bi)=>b.items.map((it,ii)=>({it,bi,ii})));
+  const total=all.length; if(!total) return sb;
+  const serving=all.filter(x=>(aim[x.it.cat]||0)>=0.4).length;
+  if(serving/total >= 0.7) return sb;                 /* the day already is the goal */
+  let budget = total>=6? 2 : 1;
+
+  const lastBi=sb.length-1, lastIi=sb[lastBi].items.length-1;
+  const cands=all.filter(x=> x.it.role!=="anchor" &&
+      !(x.bi===lastBi && x.ii===lastIi) &&
+      (aim[x.it.cat]||0) < 0.4)
+    .sort((a,b)=>(aim[a.it.cat]||0)-(aim[b.it.cat]||0));
+
+  const have={}; all.forEach(x=>{ have[x.it.cat]=(have[x.it.cat]||0)+1; });
+  const gaps=new Set(ctx.weekGaps||[]);
+  for(const x of cands){
+    if(budget<=0) break;
+    /* whichever goal category this day is shortest of, and the week behind on */
+    const target=wanted.slice().sort((a,b)=>{
+      const ga=(have[a]||0)-(gaps.has(a)?2:0), gb=(have[b]||0)-(gaps.has(b)?2:0);
+      return ga!==gb? ga-gb : aim[b]-aim[a];
+    })[0];
+    if(!target || target===x.it.cat) continue;
+    sb[x.bi].items[x.ii]=Object.assign({},x.it,
+      { cat:target, pat:null, seed:null, key:x.it.key+"~aim", aimed:true });
+    have[target]=(have[target]||0)+1;
+    have[x.it.cat]=Math.max(0,(have[x.it.cat]||0)-1);
+    budget--;
+  }
+  return sb;
+}
+
 /* ---------- what today has to work with ---------- */
 const ALL_EQUIP = ["bb","db","cable","smith","band","trx","bw","kb","ball","row","bar","bench"];
 function equipToday(ci){
@@ -3001,7 +3055,118 @@ function buildContext(dateISO,ci){
    A session that ignores the rest of the week can leave her pulling four
    days running and never pressing. This is what the week has covered so far,
    what is still to come, and what is missing. */
-const WEEK_TARGET = { squat:1, hinge:1, lunge:1, glute:2, push:1, pull:2, core:2, conditioning:1 };
+/* ---------- the body she is building ----------
+   This is the point of the whole app, so it is not left to a sentence in a
+   prompt. Each aim names the muscles it is made of, the movement categories
+   that build them, and how many days a week they have to come round. The
+   engine reads this directly: it is what tips the choice of exercise, what
+   the week is measured against, and what the coach explains itself in terms
+   of. Everything else — variety, recency, equipment, the block — still
+   applies on top; the goal decides which way the close calls fall. */
+const SHAPE = {
+  glutes:{ label:"Glutes", short:"glutes",
+    note:"Shape and build the glutes — thrusts, hinges, abduction, single leg.",
+    m:{glutes:1, hamstrings:0.6}, week:{glute:3, hinge:2} },
+  back:{ label:"Back & shoulders", short:"back",
+    note:"A stronger, wider, more defined back — rows, pulldowns, rear delts.",
+    m:{lats:1, "upper-back":0.9, back:0.9, shoulders:0.5}, week:{pull:3} },
+  core:{ label:"Waist & abs", short:"core",
+    note:"Visible definition and a trunk that holds — anti-rotation, anti-extension.",
+    m:{"deep-core":1, obliques:0.8}, week:{core:3} },
+  legs:{ label:"Legs", short:"legs",
+    note:"Quads, hamstrings and calves — squats, lunges, step-ups.",
+    m:{quads:1, hamstrings:0.8, calves:0.5, glutes:0.4}, week:{squat:2, lunge:2} },
+  arms:{ label:"Arms & chest", short:"arms",
+    note:"Tone and shape on the arms, chest and shoulders — presses, curls, raises.",
+    m:{arms:1, chest:0.8, shoulders:0.7}, week:{push:2} },
+  fit:{ label:"Leaner & fitter", short:"conditioning",
+    note:"Work capacity and conditioning — rowing, carries, circuits.",
+    m:{cardio:1}, week:{conditioning:2} }
+};
+const SHAPE_KEYS = Object.keys(SHAPE);
+/* First aim counts fully, second most of the way, third still tips a close
+   call. Beyond three it stops being a priority and starts being a list. */
+const AIM_WEIGHT = [1, 0.65, 0.4];
+const LEAN_MODES = {
+  lean:{ label:"Leaner", note:"Hold the strength, lose the softness. More conditioning." },
+  recomp:{ label:"Stronger at the same weight", note:"The scale stays put, the shape changes." },
+  build:{ label:"Build size", note:"More volume on the muscles you are shaping, more food." }
+};
+function physique(){
+  const p=(DB.profile&&DB.profile.physique)||{};
+  let pri=(p.priorities||[]).filter(k=>SHAPE[k]);
+  if(!pri.length) pri=["glutes","back","core"];
+  return { priorities:pri.slice(0,3), lean:LEAN_MODES[p.lean]?p.lean:"recomp" };
+}
+function aimLabels(){ return physique().priorities.map(k=>SHAPE[k].label); }
+/* muscle -> how much this body goal cares about it, 0..1 */
+function goalWeights(){
+  const w={};
+  physique().priorities.forEach((k,i)=>{
+    const f=AIM_WEIGHT[i]||0.3;
+    Object.entries(SHAPE[k].m).forEach(([m,v])=>{ w[m]=Math.max(w[m]||0, v*f); });
+  });
+  return w;
+}
+/* How much a movement serves the body she is after. The muscle it trains
+   first counts double — a row is back work, a plank that also braces the
+   lats is not. */
+function goalScore(nm){
+  const e=EX(nm); if(!e||!e.m||!e.m.length) return 0;
+  const w=goalWeights();
+  let s=0, n=0;
+  e.m.forEach((m,i)=>{ const f=i===0?2:1; s+=(w[m]||0)*f; n+=f; });
+  return n? Math.min(1, s/Math.max(2,n/1.6)) : 0;
+}
+/* What the work has actually done for each aim she named. This is "build on
+   what I have done" made countable rather than promised: the loaded
+   movements that serve the aim, how much she has trained them, and what has
+   gone up since. */
+function goalProgress(dateISO){
+  const d=dateISO||today();
+  const since=addDays(d,-56);
+  return physique().priorities.map((k,i)=>{
+    const sh=SHAPE[k];
+    /* What the movement is FOR, not what it happens to involve. A goblet
+       squat braces the trunk; it is not ab work, and counting it as such
+       would flatter the number and tell her nothing. So: the muscle it
+       trains first, or a second one the aim cares about almost as much. */
+    const mine=Object.keys(DB.strength||{}).filter(ex=>{
+      const e=EX(ex); if(!e||!e.m||!e.m.length) return false;
+      return (sh.m[e.m[0]]||0) >= 0.5 || (e.m[1] && (sh.m[e.m[1]]||0) >= 0.8);
+    });
+    let sets=0; const gains=[];
+    mine.forEach(ex=>{
+      const h=[...history(ex)].filter(e=>e.date>=since).sort((a,b)=>a.date<b.date?-1:1);
+      if(!h.length) return;
+      sets+=h.length;
+      if(h.length<2) return;
+      const f=topSet(h[0])||{}, l=topSet(h[h.length-1])||{};
+      if(f.w&&l.w&&l.w>f.w) gains.push({ex, from:f.w, to:l.w});
+      else if(!f.w && f.r && l.r && l.r>f.r) gains.push({ex, from:f.r, to:l.r, reps:true});
+    });
+    gains.sort((a,b)=>(b.to-b.from)-(a.to-a.from));
+    return { rank:i+1, key:k, aim:sh.label, note:sh.note,
+             movements:mine.length, sessionsLogged:sets, gains:gains.slice(0,3) };
+  });
+}
+
+/* The week she has to hit. The base is a balanced human being; the goal
+   raises the bar on what it is actually for, and never lowers it below the
+   base, so chasing glutes cannot cost her a back day. */
+const WEEK_BASE = { squat:1, hinge:1, lunge:1, glute:2, push:1, pull:2, core:2, conditioning:1 };
+function weekTarget(){
+  const t=Object.assign({},WEEK_BASE);
+  physique().priorities.forEach((k,i)=>{
+    if(i>1) return;                                   /* the top two shape the week */
+    Object.entries(SHAPE[k].week).forEach(([cat,v])=>{
+      t[cat]=Math.max(t[cat]||0, i===0? v : Math.max(WEEK_BASE[cat]||0, v-1));
+    });
+  });
+  return t;
+}
+/* kept so anything still reading the old constant sees the live targets */
+const WEEK_TARGET = WEEK_BASE;
 function weekDays(dateISO){
   const start=weekStart(dateISO||today());
   return [0,1,2,3,4,5,6].map(i=>addDays(start,i));
@@ -3020,8 +3185,8 @@ function weekBalance(dateISO){
   return bal;
 }
 function weekGaps(dateISO){
-  const bal=weekBalance(dateISO);
-  return Object.keys(WEEK_TARGET).filter(c=>(bal[c]||0) < WEEK_TARGET[c]);
+  const bal=weekBalance(dateISO), t=weekTarget();
+  return Object.keys(t).filter(c=>(bal[c]||0) < t[c]);
 }
 /* How many training days are left after this one, so the engine knows
    whether a gap still has somewhere to go. */
@@ -3108,6 +3273,11 @@ function scoreCandidate(nm,slot,ctx){
      Kept small: it is there to tip a close call toward the missing category,
      not to override how recently she did the movement. */
   if((ctx.weekGaps||[]).includes(catOf(nm))) s += ctx.daysLeft<=1? 8 : 4;
+  /* The body she is building. Big enough to decide every close call and to
+     beat a mild recency penalty, deliberately not big enough to override
+     "you did this two days ago" — that is what makes it a programme and not
+     the same four glute movements forever. */
+  s += goalScore(nm)*14;
   if((DB.prefs.favourEquipment||[]).includes(e.eq)) s+=4;
   if(hasRealMedia(nm)) s+=3;
   if(ctx.pelvic && (e.tags||[]).includes("pelvic-safe")) s+=4;
@@ -3158,9 +3328,32 @@ function pickForSlot(slot,ctx,taken){
    high, then load and reps back to the floor; a timed movement grows its
    interval. Feedback overrules the schedule. */
 const REP_CEIL = 15, REP_FLOOR = 8;
+/* The most she has been asked for on a movement recently — performed if
+   there is a log, otherwise whatever the last session prescribed, so this
+   still holds on a movement she has only been shown. */
+function lastReps(ex,beforeISO){
+  const t=topSet(lastBefore(ex,beforeISO));
+  let best=(t && t.r)? t.r : 0;
+  for(const s of priorSessions(beforeISO,20)){   /* a whole four-week block */
+    let found=null;
+    (s.blocks||[]).forEach(b=>b.items.forEach(it=>{
+      if(it.ex===ex && typeof it.reps==="number" && found==null) found=it.reps;
+    }));
+    if(found!=null){ best=Math.max(best,found); break; }
+  }
+  return best||null;
+}
 function progressionFor(ex,slot,ctx){
   const base = {reps:slot.reps, time:slot.time, why:null, kind:null};
   if(ctx.week===1) return base;                     /* week one is the baseline */
+  /* Build on what she has done. A movement can turn up in a shorter slot
+     than the one it was in last time — that must never read as being asked
+     for less than she already managed. Loaded lifts are exempt: there, reps
+     resetting to the bottom of the range is the weight going up. */
+  if(ctx.week!==4 && typeof base.reps==="number" && (EX(ex)||{}).load!=="kg"){
+    const had=lastReps(ex,ctx.date);
+    if(had && had>base.reps) base.reps=Math.min(had,REP_CEIL);
+  }
   const c=coach();
   const fb=ctx.lastFeedback;
   const st=(c.progress||{})[ex]||{};
@@ -3181,13 +3374,20 @@ function progressionFor(ex,slot,ctx){
   }
   if(typeof base.reps==="number"){
     const lastVar=st.lastVar;
-    const loaded=isLoadable(ex);
+    /* Only a movement that takes actual kilos. You cannot put 2.5 kg on a
+       resistance band, so dropping a band movement back to eight reps
+       "because the weight goes up" is asking her for less than last week
+       and calling it progress. Bands climb on reps and hold at the top;
+       the next band up is her call, not the app's. */
+    const loaded=(EX(ex)||{}).load==="kg";
     /* reps have topped out and we can add weight instead — that is the
        one change this week, so reps go back to the bottom of the range */
     if(loaded && base.reps+step > REP_CEIL && lastVar!=="load"){
       return {...base, reps:REP_FLOOR, kind:"load",
         why:"reps are at the top, so the weight goes up and the reps reset"};
     }
+    if(!loaded && base.reps>=REP_CEIL)
+      return {...base, reps:REP_CEIL, why:"you are at the top of the range — move up a band when this feels easy"};
     const r=clamp(base.reps+step, REP_FLOOR, REP_CEIL);
     if(r===base.reps) return base;
     return {...base, reps:r, kind:"reps", why:base.reps+" to "+r+" reps"};
@@ -3317,11 +3517,15 @@ function validateSession(w,ctx,opts){
     if(!ctx.equip.has(e.eq||"bw")) issues.push({code:"equipment",itemId:it.id,msg:it.ex+" needs kit she hasn't got today"});
     if(ctx.neck>=5 && ((e.tags||[]).includes("overhead")||(e.tags||[]).includes("neck-sensitive")))
       issues.push({code:"neck",itemId:it.id,msg:it.ex+" loads the neck"});
-    if(ctx.recent2.has(it.ex) && it.role!=="anchor")
+    /* On a replay she has explicitly asked for this session again, so
+       "you did this recently" is the very thing she overrode. Pain, kit,
+       the neck and the avoid list still get the last word. */
+    if(ctx.recent2.has(it.ex) && it.role!=="anchor" && !(opts&&opts.replay))
       issues.push({code:"recent",itemId:it.id,msg:it.ex+" was in one of the last two sessions"});
   }));
   const ov=overlapWithPrevious(w,ctx);
-  if(ov>0.4) issues.push({code:"overlap",msg:Math.round(ov*100)+"% of this session was in the last one"});
+  if(ov>0.4 && !(opts&&opts.replay))
+    issues.push({code:"overlap",msg:Math.round(ov*100)+"% of this session was in the last one"});
   const sig=sessionSignature(w);
   if(isRejected(sig)) issues.push({code:"rejected",msg:"she gave this session a thumbs down"});
   if(!(opts&&opts.replay) && (c.sigs||[]).some(x=>x.sig===sig && x.date!==w.date && daysBetween(x.date,w.date)<30))
@@ -3548,6 +3752,7 @@ function buildWhy(w,ctx,kept,rotated){
   /* In priority order, then the best three. Something true always comes
      first; the filler only appears when there is nothing better to say. */
   const out=[];
+  let goalLine=null;
   const add=t=>{ if(t && !out.includes(t)) out.push(t); };
 
   const repeated=(w.issues||[]).filter(i=>i.code==="recent");
@@ -3563,6 +3768,15 @@ function buildWhy(w,ctx,kept,rotated){
     const k=kept[0];
     add("Keeping "+k.ex+(k.why? " so you can go "+k.why : " so we can measure the progress")+".");
   }
+  /* The standing goal, said after whatever is specific about today — a
+     reason that is true every day must not crowd out one that is only true
+     this morning. */
+  const aims=physique().priorities;
+  if(aims.length){
+    const hits=(w.blocks||[]).flatMap(b=>b.items).filter(i=>goalScore(i.ex)>=0.55);
+    if(hits.length>=2) goalLine=plural(hits.length,"movement")+" today for your "+
+      SHAPE[aims[0]].short+" — that is what you said you are building.";
+  }
   if(ctx.lastFeedback && ctx.lastFeedback.effort==="easy") add("Last session felt easy, so the working numbers went up.");
   else if(ctx.lastFeedback && ctx.lastFeedback.effort==="hard") add("Last session felt hard, so nothing new gets added today.");
   else if(ctx.energy<=3) add("You checked in low, so the volume is down and the rests are longer.");
@@ -3576,6 +3790,7 @@ function buildWhy(w,ctx,kept,rotated){
     if(filled.length) add("Your week was short of "+
       filled.slice(0,2).map(g=>catLabel(g).toLowerCase()).join(" and ")+", so today covers it.");
   }
+  add(goalLine);
   add(BLOCK_NOTE[ctx.week]);
   if(rotated.length) add(plural(rotated.length,"accessory movement")+" changed — you did the others this week.");
   if(w.targetMins) add("Built to about "+w.mins+" minutes, which is what you asked for.");
@@ -4088,7 +4303,7 @@ function buildSession(dateISO,mode){
     return w;
   }
 
-  const blocks = slotsFor(plan,variant).map(sb=>({
+  const blocks = aimSlots(slotsFor(plan,variant),ctx).map(sb=>({
     label:sb.label, rounds:sb.rounds, rest:sb.rest, flow:sb.flow, straight:sb.straight,
     items: sb.items.map(slot=>{
       const ex = pickForSlot(slot,ctx,taken);
@@ -4101,6 +4316,7 @@ function buildSession(dateISO,mode){
                  reps:slot.reps, time:slot.time, side:slot.side};
       it.role = slot.role;
       it.cat  = slot.cat;
+      if(slot.aimed) it.aimed = true;
       if(prog.why)  it.progressWhy  = prog.why;
       if(prog.kind) it.progressKind = prog.kind;
       if(slot.role==="anchor"){
@@ -4631,6 +4847,8 @@ Never remark on her body, her weight, her eating, her motherhood, or her worth. 
 
 Nutrition is not part of this app. If she raises food, say it is handled elsewhere and move on.
 
+Everything serves the body she said she is building — profile.bodyGoal, in rank order. That is what the programme is for, and it is already baked into what the engine chose. When you say why today looks like this, say it in terms of that goal and of what she has already lifted (buildingOn), not in generalities. Never invent a new goal for her and never quietly drop one she named.
+
 The app decides the programme, not you. Never claim to have changed something unless you returned the action for it. Never invent an exercise name.
 
 Be brief. Under 45 words unless she explicitly asks you to explain something. No essays, no motivational speeches, no quotations, no gym jargon, no emojis. She should understand the plan in seconds.`;
@@ -4697,14 +4915,23 @@ function coachContext(){
   return {
     profile:{name:DB.profile.name,age:DB.profile.age,experience:DB.profile.experience,
              goals:DB.profile.goals,avoid:DB.profile.avoid,equipment:DB.profile.equipment,
-             cSection:DB.profile.csection},
+             cSection:DB.profile.csection,
+             /* the whole point of the programme, in order */
+             bodyGoal:{
+               aims:physique().priorities.map((k,i)=>({rank:i+1, what:SHAPE[k].label, means:SHAPE[k].note})),
+               approach:LEAN_MODES[physique().lean].label,
+               musclesThatMatter:goalWeights(),
+               weeklyDaysNeeded:weekTarget()
+             }},
     thisWeek:{
       style:programmeStyle().label,
       days:weekAhead(d),
       balanceSoFar:weekBalance(d),
+      targets:weekTarget(),
       stillShortOf:weekGaps(d).map(catLabel),
       trainingDaysLeft:daysLeftThisWeek(d)
     },
+    buildingOn:goalProgress(d),
     programme:{
       blockWeek:blockWeek(d), blockNote:BLOCK_NOTE[blockWeek(d)],
       heldForProgress:Object.keys(c.anchors||{}).map(k=>c.anchors[k].ex),
@@ -7311,6 +7538,80 @@ function nudgeRows(){
       '<span class="v">'+esc(x.n.text)+'</span></div>').join("")+'</div>';
 }
 
+/* ---------- the body she is building, on screen ----------
+   The first thing on Progress, because it is the first thing about the app. */
+function goalCard(){
+  const prog=goalProgress();
+  const rows=prog.map(g=>{
+    const best=g.gains[0];
+    const line = best
+      ? esc(best.ex)+' '+(best.reps? (best.from+' → '+best.to+' reps')
+                                   : (kgTxt(best.from)+' → '+kgTxt(best.to)))
+      : (g.sessionsLogged? g.sessionsLogged+' '+(g.sessionsLogged===1?'session':'sessions')+' logged — building the baseline'
+                         : 'not started yet');
+    const up = best? '+'+(best.reps? (best.to-best.from)+' reps' : kgTxt(best.to-best.from)) : '';
+    return '<div class="listrow"><span class="grow">'+
+        '<span class="k"><span class="num dim" style="margin-right:8px">'+g.rank+'</span>'+esc(g.aim)+'</span>'+
+        '<div class="tiny dim" style="margin-top:2px">'+line+'</div></span>'+
+      (up? '<span class="v"><span class="chip good">'+esc(up)+'</span></span>' : '')+'</div>';
+  }).join("");
+  const t=weekTarget(), aim=catAim();
+  const need=Object.keys(t).filter(c=>aim[c]>=0.4)
+    .sort((a,b)=>aim[b]-aim[a]).slice(0,3)
+    .map(c=>catLabel(c).toLowerCase()+' ×'+t[c]).join(' · ');
+  return '<div class="card"><div class="spread" style="margin-bottom:4px">'+
+      '<div class="eyebrow">What you\'re building</div>'+
+      '<button class="chip" onclick="goalSheet()">Change</button></div>'+
+    '<p class="tiny dim" style="margin:0 2px 12px">'+esc(LEAN_MODES[physique().lean].label)+
+      (need? '<br>Every week: '+esc(need) : '')+'</p>'+
+    rows+'</div>';
+}
+/* Up to three, in order, because the order is what the engine acts on. */
+function goalSheet(){
+  const cur=physique().priorities;
+  const row=k=>{
+    const i=cur.indexOf(k);
+    return '<button class="pick'+(i>=0?" on":"")+'" onclick="toggleAim(\''+k+'\')">'+
+      '<span class="grow"><span class="nm">'+esc(SHAPE[k].label)+'</span>'+
+      '<span class="mt">'+esc(SHAPE[k].note)+'</span></span>'+
+      (i>=0? '<span class="chip good num">'+(i+1)+'</span>' : ICO.chev)+'</button>';
+  };
+  openSheet("What body are you building?",
+    '<p class="tiny dim" style="margin:-4px 2px 12px">Pick up to three, in order. The first one is what the '+
+    'programme is really for — it decides which movements come round, how often, and what gets built on.</p>'+
+    SHAPE_KEYS.map(row).join("")+
+    '<div class="eyebrow" style="margin:18px 2px 8px">Approach</div>'+
+    Object.keys(LEAN_MODES).map(k=>'<button class="pick'+(physique().lean===k?" on":"")+'" onclick="setLean(\''+k+'\')">'+
+      '<span class="grow"><span class="nm">'+esc(LEAN_MODES[k].label)+'</span>'+
+      '<span class="mt">'+esc(LEAN_MODES[k].note)+'</span></span>'+
+      (physique().lean===k?ICO.check:ICO.chev)+'</button>').join("")+
+    '<button class="btn" style="margin-top:18px" onclick="applyGoal()">'+
+      '<span class="lbl">Aim the programme at this</span></button>');
+}
+function toggleAim(k){
+  const p=DB.profile.physique=DB.profile.physique||{priorities:[],lean:"recomp"};
+  const list=(p.priorities||[]).slice();
+  const i=list.indexOf(k);
+  if(i>=0) list.splice(i,1);
+  else if(list.length>=3) { toast("Three is the limit — tap one to drop it"); return; }
+  else list.push(k);
+  if(!list.length){ toast("Keep at least one"); return; }
+  p.priorities=list; save();
+  goalSheet();
+  if(CUR==="progress") renderProgress();
+}
+function setLean(k){
+  const p=DB.profile.physique=DB.profile.physique||{priorities:["glutes"],lean:"recomp"};
+  p.lean=k; save(); goalSheet();
+  if(CUR==="progress") renderProgress();
+}
+/* Changing what she is building should change tomorrow, not next month. */
+function applyGoal(){
+  closeSheet();
+  coach().nonce=(coach().nonce||0)+1; save();
+  rebuildWorkout();
+  toast("Programme aimed at "+aimLabels()[0].toLowerCase());
+}
 function renderProgress(){
   const st=monthStats();
   const necks=neckTrend(30);
@@ -7320,6 +7621,7 @@ function renderProgress(){
   el("progWrap").innerHTML=
     '<div class="topbar"><div><h1>Progress</h1><div class="date">'+MONTHS[parseISO(today()).getMonth()]+' '+parseISO(today()).getFullYear()+'</div></div></div>'+
     '<div class="two-col"><div class="stack-lg">'+
+      goalCard()+
       weekStripHTML()+
       '<div class="statgrid">'+
         '<div class="stat"><div class="k">Sessions</div><div class="v num">'+st.done+' <small>/ '+st.planned+'</small></div></div>'+
@@ -7951,6 +8253,9 @@ function renderSettings(){
       '<div class="hint" id="aiMsg" style="margin-top:10px"></div>'+
     '</div>'+
     '<div class="card"><div class="eyebrow" style="margin-bottom:14px">Session</div>'+
+      '<div class="listrow"><span class="grow"><span class="k">The body you\'re building</span>'+
+        '<div class="tiny dim">'+esc(aimLabels().join(" · "))+'</div></span>'+
+        '<button class="chip" onclick="goalSheet()">Change</button></div>'+
       '<div class="listrow"><span class="grow"><span class="k">Coach\'s voice</span>'+
         '<div class="tiny dim">'+((DB.prefs.coachTone==="military")?"Direct — brief and accountable":"Warm — encouraging and concise")+'</div></span>'+
         '<button class="chip" onclick="toneSheet()">Change</button></div>'+

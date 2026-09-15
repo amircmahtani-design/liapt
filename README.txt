@@ -85,6 +85,90 @@ Open the Netlify URL in Safari -> Share -> Add to Home Screen.
 
 6. WHAT'S NEW IN v2.1 — THE COACH ACTUALLY COACHES
 ==================================================
+THE BODY SHE IS BUILDING
+  This is the point of the app, so it is not left to a sentence in a prompt.
+  Progress -> What you're building (or Settings -> The body you're building)
+  asks the question directly, and she picks up to three aims IN ORDER:
+
+    Glutes            thrusts, hinges, abduction, single leg
+    Back & shoulders  rows, pulldowns, rear delts
+    Waist & abs       anti-rotation, anti-extension
+    Legs              squats, lunges, step-ups
+    Arms & chest      presses, curls, raises
+    Leaner & fitter   rowing, carries, circuits
+
+  plus an approach: leaner, stronger at the same weight, or build size.
+  Hers is set to glutes, back, abs — the same thing her written goals said,
+  in a shape the engine can act on.
+
+  The order matters, because the engine acts on it three ways:
+
+  1. It tips every close call. A movement is scored on how much it serves
+     those muscles — the one it trains FIRST counting double — alongside
+     recency, variety, equipment and the block. Big enough to decide a close
+     call and to beat a mild recency penalty; deliberately not big enough to
+     override "you did this two days ago", or it would be the same four
+     glute movements forever.
+
+  2. It re-points the day. Choosing a better exercise for a slot is not
+     enough: if the template gives a day one pull slot, a back goal still
+     only gets one pull. So one accessory slot (two on a long day) is
+     re-pointed at what she is building. Never an anchor, never the slot the
+     weekly balance check needs, and nothing at all on a day that already
+     serves the goal — the day stays hers.
+
+  3. It raises the weekly bar. Glutes first means glute work three days a
+     week instead of two, and hinges twice. The goal never LOWERS the base,
+     so chasing glutes cannot cost her a back day.
+
+  Measured over eight simulated weeks, switching the goal from glutes/back/
+  abs to arms/legs/fitter moved the actual training:
+
+    glutes + hamstrings    660 -> 474 weighted sets
+    back + lats            317 -> 215
+    arms + chest + delts   202 -> 332
+    share of work serving the stated goal    68% -> 45%
+
+  ...while still producing 40 distinct sessions out of 40 and 105 different
+  movements, so nothing was flattened to get there.
+
+  Change the goal and tap "Aim the programme at this" and today is rebuilt
+  immediately, not next month.
+
+BUILDING ON WHAT SHE HAS DONE
+  The same card shows what the work has actually produced, per aim: the
+  movements that genuinely serve it, and the biggest gain since. So:
+
+    1  Glutes             Hip Thrust 20 kg -> 25 kg         +5 kg
+    2  Back & shoulders   Band Pull-Apart 8 -> 14 reps      +6 reps
+    3  Waist & abs        Banded Pallof Press 10 -> 12      +2 reps
+
+  A movement only counts toward an aim if that is what it is FOR — the
+  muscle it trains first, or a close second. A goblet squat braces the
+  trunk, but it is not ab work, and counting it as such would flatter the
+  number and tell her nothing.
+
+  Two engine bugs surfaced while proving this out, both now fixed:
+
+    - A movement could be prescribed FEWER reps than last time simply
+      because it turned up in a shorter slot. Nothing outside week four (the
+      deload) is ever allowed to ask for less than she has already done.
+
+    - A band movement at the top of its rep range was being reset to eight
+      reps "because the weight goes up". You cannot put 2.5 kg on a
+      resistance band. Bands and bodyweight now climb on reps and hold at
+      the top, and she is told to move up a band when it feels easy. Only
+      movements that take actual kilos reset.
+
+  And a session she gave a thumbs up now comes back as she liked it: "you
+  did this recently" is exactly what a thumbs up overrides, so the replay is
+  exempt from the recency and overlap checks. Pain, the neck, the avoid list
+  and missing kit still get the last word.
+
+  The coach is handed all of this structurally — the ranked aims, the
+  muscles that matter and by how much, the weekly targets, and what has gone
+  up — not as prose, and it is told to explain today in those terms.
+
 THE PROGRAMME, NOT A FIXED LIST
   Every Monday used to be the same nine movements. The five weekday
   templates now describe the SHAPE of each day — how many blocks, how many
