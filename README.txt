@@ -328,6 +328,47 @@ SWAP, AND "I DON'T LIKE THIS ONE"
   not in the warm-up, not in the cool-down. Put it back any time in
   Settings -> Programme -> Movements you like and avoid.
 
+TALKING TO THE COACH CHANGES THE APP
+  She can say what she wants in her own words and the programme changes.
+  Seventeen validated actions, and the engine still gets the last word on
+  every one: change the length of today, take a rest day, rebuild, rotate or
+  replace a movement, add or remove one, change the rounds, put a movement
+  on hold after pain, ban one for good, put a banned one back, mark one she
+  likes, change what body she is building, change today's equipment, change
+  the programme style or the variety-against-strength dial.
+
+  Three things make that work rather than nearly work:
+
+  SHE RARELY SAYS ONE THING. "My knee hurts on split squats and I have only
+  got 25 minutes" is two instructions. Up to three are now returned and
+  applied in order, and each is reported. It used to take one and drop the
+  rest.
+
+  IT UNDERSTANDS HER WITHOUT THE KEY. The OpenAI key lives on one device, so
+  on any other phone the coach would hear "my knee hurts" and change
+  nothing. The plain cases are now read in code — how long she has, what
+  hurts, what she hates, what she wants to build, what kit she has today, a
+  rest day, a rebuild — and turned into the same validated actions. It also
+  runs as a safety net when the model replies warmly but returns no action,
+  so "I have only got 20 minutes" can never be answered with agreement and
+  no change.
+
+  The reading is careful about which half of a sentence is which: "my back
+  hurts and I want to work on my arms" is a held movement and an ARMS goal,
+  not a back goal. Aims are only read from the part of the sentence asking
+  for them, in the order she said them.
+
+  SHE CAN SEE IT AND UNDO IT. What changed is its own line in the chat,
+  ticked and in green, with an Undo on the last one. Undo puts back
+  everything a coach action can touch — the session, the check-in, the avoid
+  list, what is on hold, the body goal and the preferences — not just the
+  session, which is all the workout undo covered.
+
+  What it will not do is unchanged. It cannot add a barbell movement on a
+  bodyweight day, bring back something held for pain, or break the recency
+  and equipment rules. It says why instead: "I can't add that — you haven't
+  got the Barbell today."
+
 THE COACH
   Warm, confident and concise by default. The direct voice is still there in
   Settings -> Session -> Coach's voice. It sees the last ten workouts, the

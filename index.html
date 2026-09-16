@@ -568,6 +568,12 @@ details.sec[open] summary svg{transform:rotate(180deg);}
 .chatlog{display:flex;flex-direction:column;gap:var(--s3);padding-bottom:var(--s4);}
 .msg{max-width:86%;padding:13px 16px;border-radius:18px;font-size:15px;line-height:1.5;}
 .msg.coach{background:var(--surface);color:var(--ink);align-self:flex-start;border-bottom-left-radius:6px;box-shadow:var(--sh-1);}
+/* what the coach actually changed, as opposed to what it said */
+.msg.coach.did{display:flex;gap:9px;align-items:flex-start;background:var(--good-soft);
+  color:var(--good);font-weight:500;box-shadow:none;}
+.msg.coach.did svg{width:18px;height:18px;flex:none;margin-top:2px;}
+.msg.coach.did .undo{margin-left:auto;color:inherit;text-decoration:underline;flex:none;
+  font-weight:600;white-space:nowrap;}
 .msg.me{background:var(--blue);color:#fff;align-self:flex-end;border-bottom-right-radius:6px;}
 .msg b{font-weight:600;}
 .composer{position:fixed;left:0;right:0;bottom:calc(76px + var(--safe-bot));z-index:60;padding:0 18px;
@@ -2218,6 +2224,15 @@ function allNames(){ return [...EX_NAMES, ...Object.keys(DB.lib||{})]; }
 const EQUIP_OK = ["bb","db","cable","smith","band","trx","bw","kb","ball","row","bar","bench"];
 const EQUIP_LABEL = {bb:"Barbell",db:"Dumbbells",cable:"Cable",smith:"Smith",band:"Band",trx:"TRX",
   bw:"Bodyweight",kb:"Kettlebell",ball:"Ball",row:"Rower",bar:"Pull-up bar",bench:"Bench"};
+/* The words she actually uses for her kit, so "only bands today" lands. */
+const EQ_WORD = { band:"band", bands:"band", "resistance band":"band", "resistance bands":"band",
+  dumbbell:"db", dumbbells:"db", db:"db", barbell:"bb", bar:"bb", bb:"bb",
+  cable:"cable", cables:"cable", smith:"smith", trx:"trx", straps:"trx",
+  bodyweight:"bw", "body weight":"bw", none:"bw", nothing:"bw", "no kit":"bw", "no equipment":"bw",
+  kettlebell:"kb", kettlebells:"kb", kb:"kb", ball:"ball", "stability ball":"ball",
+  rower:"row", "rowing machine":"row", row:"row", erg:"row",
+  "pull-up bar":"bar", "pullup bar":"bar", bench:"bench", mat:"bw" };
+function eqLabel(e){ return EQUIP_LABEL[e]||e; }
 const UNAVAILABLE = /leg press|leg extension|leg curl machine|hack squat|smith machine calf|pec deck|assisted pull-?up machine|hip thrust machine|abductor machine|glute ham raise|stair ?master|treadmill|elliptical|spin bike/i;
 
 /* Muscle grouping for filters and the body map */
@@ -5043,16 +5058,22 @@ const S_ANALYSIS={type:"object",additionalProperties:false,
   }};
 const S_MESSAGE={type:"object",additionalProperties:false,required:["message"],
   properties:{message:{type:"string"}}};
-const S_CHAT={type:"object",additionalProperties:false,required:["message","action"],
+/* She rarely says one thing at a time, so the model returns a list. */
+const S_ACTION={type:"object",additionalProperties:false,
+  required:["kind","exercise","replacement","value","list"],
+  properties:{
+    kind:{type:"string",enum:["none","set_duration","rest_today","rebuild","replace","add","remove",
+      "set_rounds","ban","hold","rotate","set_goal","set_equipment","set_style","set_build","unhold","love"]},
+    exercise:{type:"string",description:"Exact catalogue name; a block letter for set_rounds; a style or build key for set_style/set_build; otherwise an empty string."},
+    replacement:{type:"string",description:"Exact catalogue name, or an empty string."},
+    value:{type:"number",description:"Minutes for set_duration, rounds for set_rounds, otherwise 0."},
+    list:{type:"array",items:{type:"string"},
+      description:"For set_goal: aim keys in priority order from glutes, back, core, legs, arms, fit. For set_equipment: equipment codes she has today. Otherwise empty."}
+  }};
+const S_CHAT={type:"object",additionalProperties:false,required:["message","actions"],
   properties:{
     message:{type:"string"},
-    action:{type:"object",additionalProperties:false,required:["kind","exercise","replacement","value"],
-      properties:{
-        kind:{type:"string",enum:["none","set_duration","rest_today","rebuild","replace","add","remove","set_rounds","ban","hold","rotate"]},
-        exercise:{type:"string",description:"Exact catalogue name, a block letter for set_rounds, or an empty string."},
-        replacement:{type:"string",description:"Exact catalogue name, or an empty string."},
-        value:{type:"number",description:"Minutes for set_duration, rounds for set_rounds, otherwise 0."}
-      }}
+    actions:{type:"array",items:S_ACTION,description:"Up to three, in the order they should be applied. Empty when nothing needs changing."}
   }};
 const S_REVIEW={type:"object",additionalProperties:false,required:["headline","summary","focus"],
   properties:{headline:{type:"string"},summary:{type:"string"},
@@ -5163,6 +5184,40 @@ function whyRefused(ctx,ex){
   if(ctx.recent2.has(ex)) return "you did "+ex+" in one of the last two sessions";
   return ex+" doesn't fit today's session";
 }
+/* Everything a coach action can touch, so "undo that" puts all of it back
+   — not just the session, which is all the workout undo covers. */
+let COACH_UNDO=null;
+function coachSnapshot(){
+  const d=today();
+  return { date:d,
+    session: DB.sessions[d]? JSON.parse(JSON.stringify(DB.sessions[d])) : null,
+    checkin: DB.checkins[d]? JSON.parse(JSON.stringify(DB.checkins[d])) : null,
+    exPrefs: JSON.parse(JSON.stringify(DB.exPrefs||{})),
+    blocked: JSON.parse(JSON.stringify(coach().blocked||{})),
+    physique: JSON.parse(JSON.stringify((DB.profile||{}).physique||{})),
+    prefs: JSON.parse(JSON.stringify(DB.prefs||{})) };
+}
+function coachCanUndo(){ return !!COACH_UNDO; }
+function undoCoach(){
+  if(!COACH_UNDO){ toast("Nothing to undo"); return; }
+  const u=COACH_UNDO; COACH_UNDO=null;
+  if(u.session) DB.sessions[u.date]=u.session; else delete DB.sessions[u.date];
+  if(u.checkin) DB.checkins[u.date]=u.checkin; else delete DB.checkins[u.date];
+  DB.exPrefs=u.exPrefs; coach().blocked=u.blocked;
+  DB.profile.physique=u.physique; DB.prefs=u.prefs;
+  save(); refresh(); renderChat(); toast("Put back");
+}
+/* She rarely says one thing. "My knee hurts and I have got half an hour" is
+   two instructions, so up to three are run in order and each is reported. */
+function runCoachActions(list){
+  const acts=(Array.isArray(list)? list : [list]).filter(a=>a&&a.kind&&a.kind!=="none").slice(0,3);
+  if(!acts.length) return null;
+  COACH_UNDO=coachSnapshot();
+  const out=[];
+  acts.forEach(a=>{ const r=runCoachAction(a); if(r) out.push(r); });
+  if(!out.length){ COACH_UNDO=null; return null; }
+  return out.join(" ");
+}
 function runCoachAction(a){
   if(!a||a.kind==="none") return null;
   const d=today();
@@ -5248,6 +5303,62 @@ function runCoachAction(a){
     save();
     return oldEx+" → "+newEx+".";
   }
+  /* The point of the whole app: what she is building. */
+  if(a.kind==="set_goal"){
+    const aims=(a.list||[]).map(x=>String(x||"").trim().toLowerCase())
+      .map(x=>SHAPE_KEYS.find(k=>k===x||SHAPE[k].label.toLowerCase()===x||SHAPE[k].short===x))
+      .filter(Boolean);
+    const uniq=[...new Set(aims)].slice(0,3);
+    if(!uniq.length) return null;
+    DB.profile.physique={...(DB.profile.physique||{}), priorities:uniq};
+    coach().nonce=(coach().nonce||0)+1;
+    save();
+    if(!live){ regenerate(d, w.duration||"full"); }
+    return "Programme aimed at "+uniq.map(k=>SHAPE[k].label.toLowerCase()).join(", then ")+".";
+  }
+  if(a.kind==="set_equipment"){
+    if(live) return null;
+    const kit=(a.list||[]).map(x=>String(x||"").trim().toLowerCase())
+      .map(x=>ALL_EQUIP.find(e=>e===x)||EQ_WORD[x]).filter(Boolean);
+    const uniq=[...new Set(kit)];
+    if(!uniq.length) return null;
+    if(!uniq.includes("bw")) uniq.push("bw");
+    const ci=checkinOn(d)||{date:d};
+    DB.checkins[d]={...ci, equip:uniq};
+    save();
+    regenerate(d, w.duration||"full");
+    return "Today built for "+uniq.filter(e=>e!=="bw").map(eqLabel).join(", ")+" — "+DB.sessions[d].title+".";
+  }
+  if(a.kind==="set_style"){
+    const k=String(a.exercise||"").trim().toLowerCase();
+    const key=Object.keys(PROGRAMME_STYLES).find(x=>x===k||PROGRAMME_STYLES[x].label.toLowerCase()===k);
+    if(!key) return null;
+    DB.prefs.style=key; coach().nonce=(coach().nonce||0)+1; save();
+    if(!live) regenerate(d, w.duration||"full");
+    return "Switched to "+PROGRAMME_STYLES[key].label+".";
+  }
+  if(a.kind==="set_build"){
+    const k=String(a.exercise||"").trim().toLowerCase();
+    const key=Object.keys(BUILD_MODES).find(x=>x===k||(BUILD_MODES[x].label||"").toLowerCase()===k);
+    if(!key) return null;
+    DB.prefs.build=key; save();
+    return "Set to "+(BUILD_MODES[key].label||key)+".";
+  }
+  if(a.kind==="unhold"){
+    const ex=name(a.exercise); if(!ex) return null;
+    if(!coach().blocked[ex] && !(DB.exPrefs[ex]||{}).avoid) return ex+" was not on hold.";
+    unblockExercise(ex);
+    if(DB.exPrefs[ex]) delete DB.exPrefs[ex].avoid;
+    save();
+    return ex+" is back in the programme.";
+  }
+  if(a.kind==="love"){
+    const ex=name(a.exercise); if(!ex) return null;
+    DB.exPrefs[ex]={...(DB.exPrefs[ex]||{}), love:true};
+    delete DB.exPrefs[ex].avoid;
+    save();
+    return ex+" noted as one you like — it will come round more.";
+  }
   /* "give me something else for this one" — the engine chooses, not the model */
   if(a.kind==="rotate"){
     const oldEx=name(a.exercise); if(!oldEx) return null;
@@ -5293,7 +5404,19 @@ kind "remove" with exercise — an exact catalogue name in today's session.
 kind "set_rounds" with exercise as a block letter (A, B, C, or empty for all) and value as the number of rounds.
 kind "hold" with exercise — it hurt, take it out until she says otherwise.
 kind "ban" with exercise — she never wants to see it again.
-kind "none" — everything else. Say what you would do rather than pretending.
+kind "unhold" with exercise — put one she banned or held back in.
+kind "love" with exercise — she likes it; bring it round more often.
+kind "set_goal" with list — the body she is building, in priority order, from
+  glutes, back, core, legs, arms, fit. This is what the whole programme is
+  aimed at, so only when she says what she wants to build or change focus to.
+kind "set_equipment" with list — what she has today, from `+ALL_EQUIP.join(", ")+`.
+kind "set_style" with exercise — one of lia, mixed, bodybuilding.
+kind "set_build" with exercise — one of variety, balanced, strength.
+
+RETURN A LIST. She rarely says one thing: "my knee hurts and I have only got
+half an hour" is a hold and a set_duration. Return up to three actions in the
+order they should happen. Return an empty list when nothing needs changing —
+say what you would do rather than pretending you did it.
 
 Exact catalogue names: `+allNames().join(", ")+`
 
@@ -5302,11 +5425,104 @@ and never state a change as done — the app appends what actually happened.`,
     {question:text, recentMessages:hist, context:ctx},
     S_CHAT,"coach_reply",420);
   if(!ai){
-    return {message: fallbackChat(text), action:null, applied:null};
+    /* No key, or the call failed. She should still be understood — the
+       app reads the plain cases itself and acts on them. */
+    const acts=localIntent(text);
+    const applied=runCoachActions(acts);
+    /* If we understood her and did it, the change is the answer. Adding a
+       generic line on top of it just reads like the coach ignored her. */
+    return {message: applied? "" : fallbackChat(text), action:acts[0]||null, applied};
   }
-  const applied=runCoachAction(ai.action);
-  return {message:ai.message, action:ai.action, applied};
+  let acts=ai.actions||(ai.action?[ai.action]:[]);
+  /* The model said nothing needed doing, but she plainly asked for
+     something. Fall back on reading it ourselves rather than replying
+     warmly and changing nothing. */
+  if(!acts.filter(a=>a&&a.kind&&a.kind!=="none").length) acts=localIntent(text);
+  const applied=runCoachActions(acts);
+  return {message:ai.message, action:acts[0]||null, applied};
 }
+/* ---------- reading her without a model ----------
+   The key lives on one device, so on any other phone the coach would hear
+   "my knee hurts" and change nothing. These are the plain cases, read in
+   code: conservative, and every one of them is a validated action the
+   engine can still refuse. Used when there is no key, and as a safety net
+   when the model answers warmly but does nothing. */
+function exInText(t){
+  const low=" "+t.toLowerCase()+" ";
+  /* longest name first, so "Bulgarian Split Squat" wins over "Squat" */
+  return allNames().filter(n=>low.includes(" "+n.toLowerCase()))
+    .sort((a,b)=>b.length-a.length)[0]||null;
+}
+const AIM_WORD = { glute:"glutes", glutes:"glutes", bum:"glutes", butt:"glutes",
+  back:"back", lat:"back", lats:"back", shoulder:"back", shoulders:"back",
+  ab:"core", abs:"core", core:"core", waist:"core", stomach:"core", tummy:"core",
+  leg:"legs", legs:"legs", quad:"legs", quads:"legs", thigh:"legs", thighs:"legs",
+  arm:"arms", arms:"arms", chest:"arms", tricep:"arms", triceps:"arms", bicep:"arms", biceps:"arms",
+  lean:"fit", leaner:"fit", fit:"fit", fitter:"fit", cardio:"fit", conditioning:"fit" };
+function localIntent(text){
+  const t=String(text||"").trim(); if(!t) return [];
+  const low=t.toLowerCase();
+  const out=[];
+  const A=(kind,o)=>out.push({kind, exercise:"", replacement:"", value:0, list:[], ...(o||{})});
+  const ex=exInText(t);
+
+  /* not training */
+  if(/\b(rest day|not training|skip today|day off|taking today off|can'?t train)\b/.test(low))
+    A("rest_today");
+
+  /* how long she has */
+  const mins=low.match(/\b(\d{1,3})\s*(?:min|mins|minutes)\b/);
+  if(mins) A("set_duration",{value:+mins[1]});
+  else if(/\b(half an hour)\b/.test(low)) A("set_duration",{value:30});
+  else if(/\b(an hour)\b/.test(low)) A("set_duration",{value:60});
+
+  /* it hurt */
+  if(ex && /\b(hurt|hurts|hurting|hurt my|painful|pain|sore|tweak|tweaked|aggravat)\w*\b/.test(low))
+    A("hold",{exercise:ex});
+  /* never again */
+  else if(ex && /\b(hate|hates|never again|never want|can'?t stand|don'?t like|do not like|dislike)\b/.test(low))
+    A("ban",{exercise:ex});
+  /* something else for this one */
+  else if(ex && /\b(something else|swap|switch|change|different|instead|replace|another)\b/.test(low))
+    A("rotate",{exercise:ex});
+  /* she likes it */
+  else if(ex && /\b(love|loves|really like|favourite|favorite|enjoy)\b/.test(low))
+    A("love",{exercise:ex});
+  /* put it back */
+  if(ex && /\b(put .* back|allow|un-?hold|unban|bring back|it'?s fine now|feels fine now)\b/.test(low))
+    A("unhold",{exercise:ex});
+
+  /* What she is building. Only the part of the sentence that is actually
+     asking for it: "my back hurts and I want to work on my arms" is a held
+     movement and an arms goal, not a back goal. */
+  const wants=low.match(/\b(?:focus(?:sing|ing)?\s+on|concentrate\s+on|work\s+on|prioriti[sz]e|build(?:ing)?|target(?:ing)?|aim(?:ing)?\s+(?:for|at)|i\s+want)\b/);
+  if(wants){
+    const tail=low.slice(wants.index);
+    const aims=[];
+    Object.keys(AIM_WORD).forEach(k=>{
+      const m=new RegExp("\\b"+k+"\\b").exec(tail);
+      if(m && !aims.some(a=>a.k===AIM_WORD[k])) aims.push({k:AIM_WORD[k], at:m.index});
+    });
+    aims.sort((a,b)=>a.at-b.at);                   /* the order she said them */
+    if(aims.length) A("set_goal",{list:aims.map(a=>a.k).slice(0,3)});
+  }
+
+  /* what she has with her */
+  if(/\b(only|just|all i have|all i'?ve got|no more than|nothing but|travelling|travelling|hotel|away)\b/.test(low)){
+    const kit=[];
+    Object.keys(EQ_WORD).sort((a,b)=>b.length-a.length).forEach(word=>{
+      if(low.includes(word) && !kit.includes(EQ_WORD[word])) kit.push(EQ_WORD[word]);
+    });
+    if(kit.length) A("set_equipment",{list:kit});
+  }
+
+  /* a different session altogether */
+  if(!out.length && /\b(rebuild|something different|another workout|change the workout|don'?t fancy this|new workout)\b/.test(low))
+    A("rebuild");
+
+  return out.slice(0,3);
+}
+
 /* Without an API key the coach still answers, from the same engine the
    session came from. Fewer words, same facts. */
 function fallbackChat(text){
@@ -7927,8 +8143,13 @@ async function sendChat(){
   try{
     const r=await coachReply(text);
     DB.chat=DB.chat.filter(m=>!m.typing);
-    pushCoach(r.message + (r.applied? " ("+r.applied+")" : ""));
-    if(r.applied){ toast(r.applied); if(CUR==="train") renderTrain(); }
+    if(r.message) pushCoach(r.message);
+    /* What actually changed is its own line, marked as a change she can
+       undo — not buried in brackets at the end of a sentence. */
+    if(r.applied){
+      DB.chat.push({who:"coach", text:r.applied, did:true, at:Date.now()});
+      save(); toast(r.applied); refresh();
+    }
   }catch(e){
     DB.chat=DB.chat.filter(m=>!m.typing);
     pushCoach("Connection failed. Try again.");
@@ -7947,8 +8168,14 @@ function renderChat(){
     const line = isRestDay(d)? pickLine("rest") : (!ci? pickLine("nocheckin") : pickLine("ready"));
     DB.chat=[{who:"coach",text:line,at:Date.now()}]; save();
   }
-  log.innerHTML=(DB.chat||[]).map(m=>'<div class="msg '+(m.who==="me"?"me":"coach")+'">'+
-    (m.typing? '<span class="spin dark"></span>' : esc(m.text).replace(/\n/g,"<br>"))+'</div>').join("")+
+  const lastDid=(DB.chat||[]).map((m,i)=>m.did?i:-1).filter(i=>i>=0).pop();
+  const undoable=coachCanUndo();
+  log.innerHTML=(DB.chat||[]).map((m,i)=>{
+    if(m.did) return '<div class="msg coach did">'+ICO.check+'<span>'+esc(m.text)+'</span>'+
+      ((i===lastDid&&undoable)? '<button class="linkbtn undo" onclick="undoCoach()">Undo</button>':'')+'</div>';
+    return '<div class="msg '+(m.who==="me"?"me":"coach")+'">'+
+      (m.typing? '<span class="spin dark"></span>' : esc(m.text).replace(/\n/g,"<br>"))+'</div>';
+  }).join("")+
     (aiReady()?'':'<div class="msg coach" style="background:var(--warn-soft);color:var(--warn)">'+
       'No API key. I can still run the session, but I can\'t talk properly. '+
       '<button class="linkbtn" onclick="go(\'settings\')" style="color:inherit;text-decoration:underline">Add one</button></div>');
