@@ -6058,6 +6058,7 @@ function tick(){
   if(!w||!w.state){ return; }
   const c=el("sessClock");
   if(c) c.textContent=fmtClock(sessionElapsed(w)/1000);
+  syncTimers(w);
   paintRest(w);
   paintWork(w);
   maybeAutoStart(w);
@@ -6159,7 +6160,7 @@ function alertDone(){ cueDone(); }
    only reason to look at the phone is to see the picture. */
 const LEAD_SECS = 5;
 function startWork(id,opts){
-  const w=W(), f=findItem(w,id); if(!f) return;
+  const w=W(), f=findAnyItem(w,id); if(!f) return;
   unlockAudio();
   /* tapping a running timer stops it, and stops it starting itself again */
   if(!(opts&&opts.auto) && (w.state.work||w.state.lead) &&
@@ -6169,7 +6170,7 @@ function startWork(id,opts){
     clearCue("work"); clearCue("lead");
     save(); renderTrain(); return;
   }
-  const secs=f.item.time||30;
+  const secs=holdSecs(f.item);
   w.state.lead=null; clearCue("lead"); clearCue("work");
   w.state.work={ itemId:id, total:secs, side:1, endsAt:Date.now()+secs*1000, left:isPaused(w)?secs:null };
   if(!(opts&&opts.quiet)) cueGo();
@@ -6177,7 +6178,7 @@ function startWork(id,opts){
 }
 /* A short count-in so she is not caught halfway into position. */
 function leadIn(id){
-  const w=W(), f=findItem(w,id); if(!f) return;
+  const w=W(), f=findAnyItem(w,id); if(!f) return;
   w.state.lead={ itemId:id, total:LEAD_SECS, endsAt:Date.now()+LEAD_SECS*1000,
                  left:isPaused(w)?LEAD_SECS:null };
   clearCue("lead");
@@ -6195,17 +6196,78 @@ function workLeft(w){
 }
 /* Start the clock for a timed movement the moment it comes up, unless she
    has turned that off or stopped this one by hand. */
+/* A clock belongs to one movement. If she has moved on since it started —
+   tapped "start block A" part-way through the warm-up, finished the last
+   set into the cool-down, ticked something off by hand — a timer still
+   pointing at the old movement would sit there for ever, and because a
+   timer is running nothing would start the next one either. */
+function syncTimers(w){
+  const it=activeItem(w);
+  const id=it? it.id : null;
+  if(w.state.lead && w.state.lead.itemId!==id){ w.state.lead=null; clearCue("lead"); }
+  if(w.state.work && w.state.work.itemId!==id){ w.state.work=null; clearCue("work"); }
+}
 function maybeAutoStart(w){
   if(DB.prefs.autoTimer===false) return;
-  if(w.state.phase!=="work" || w.state.rest || isPaused(w)) return;
+  const ph=w.state.phase;
+  if(ph!=="work" && ph!=="prep" && ph!=="cool") return;
+  if(w.state.rest || isPaused(w)) return;
   if(w.state.work || w.state.lead) return;
-  const it=curItem(w);
-  if(!it || !it.time || it.noAuto || isDone(w,it)) return;
+  const it=activeItem(w);
+  if(!it || it.noAuto) return;
+  /* In the session itself only timed holds run themselves — a set of
+     twelve is hers to pace. The warm-up and the cool-down are a sequence
+     she should be able to get through without touching the phone at all. */
+  if(ph==="work" && (!it.time || isDone(w,it))) return;
   leadIn(it.id);
+}
+/* The warm-up and the cool-down are lists she works down, not blocks with
+   rounds, so "the movement she is on" is the first one not ticked off. One
+   accessor for all three parts of the session means the count-in, the
+   clock, the side change and the finish beep are the same code everywhere. */
+function activeItem(w){
+  if(!w||!w.state) return null;
+  if(w.state.phase==="prep") return (w.prep||[]).find(p=>!(w.state.prepDone||{})[p.id])||null;
+  if(w.state.phase==="cool") return (w.cooldown||[]).find(c=>!(w.state.coolDone||{})[c.id])||null;
+  return curItem(w);
+}
+/* How long to hold a warm-up or cool-down move. Most carry their own
+   seconds; the few written in reps get a generous count so the sequence
+   still runs itself rather than stalling on "8 wall slides". */
+function holdSecs(it){
+  if(!it) return 30;
+  if(it.time) return it.time;
+  const r=(typeof it.reps==="number")? it.reps : 8;
+  return clamp(Math.round(r*4), 20, 60);
+}
+function nextAfter(w,it){
+  const list = w.state.phase==="prep"? (w.prep||[]) : (w.cooldown||[]);
+  const done = w.state.phase==="prep"? (w.state.prepDone||{}) : (w.state.coolDone||{});
+  const rest = list.filter(x=>x.id!==it.id && !done[x.id]);
+  return rest.length? rest[0].ex : null;
+}
+/* Tick it off and move the sequence on, whichever part of the session. */
+function completeActive(w,id){
+  const ph=w.state.phase;
+  if(ph==="work"){ completeItem(id); return; }
+  w.state.work=null; w.state.lead=null; clearCue("work"); clearCue("lead");
+  const list = ph==="prep"? (w.prep||[]) : (w.cooldown||[]);
+  const key  = ph==="prep"? "prepDone" : "coolDone";
+  w.state[key]=w.state[key]||{};
+  w.state[key][id]=true;
+  const left=list.filter(x=>!w.state[key][x.id]);
+  if(!left.length){
+    if(ph==="prep"){
+      w.state.phase="work"; save(); say("Warm-up done. Block A.");
+      toast("Warm-up done. Block A."); renderTrain();
+    } else { save(); finishSession(); }
+    return;
+  }
+  save(); say("Next. "+left[0].ex); renderTrain();
 }
 function paintWork(w){
   const b=el("workBtn"); if(!b) return;
-  const it=curItem(w);
+  const it=activeItem(w);
   if(!it){ return; }
   /* counting her in */
   if(w.state.lead && w.state.lead.itemId===it.id){
@@ -6222,7 +6284,7 @@ function paintWork(w){
   const k=w.state.work;
   if(!k || k.itemId!==it.id){
     b.classList.remove("running");
-    b.innerHTML=ICO.play+'<span class="lbl">Start '+(it.time||0)+'s</span>';
+    b.innerHTML=ICO.play+'<span class="lbl">Start '+holdSecs(it)+'s</span>';
     return;
   }
   const left=workLeft(w);
@@ -6241,7 +6303,7 @@ function paintWork(w){
     }
     w.state.work=null; clearCue("work");
     alertDone();
-    completeItem(it.id);
+    completeActive(w,it.id);
   }
 }
 
@@ -6253,7 +6315,12 @@ function startWorkout(){
   w.state.phase=(w.prep&&w.prep.length)?"prep":"work";
   save(); renderTrain(); startTicking(); toTop();
 }
-function skipPrep(){ const w=W(); w.state.phase="work"; save(); renderTrain(); toTop(); }
+function skipPrep(){
+  const w=W();
+  w.state.phase="work"; w.state.lead=null; w.state.work=null;
+  clearCue("lead"); clearCue("work");
+  save(); renderTrain(); toTop();
+}
 function finishSession(){
   const w=W();
   completeSession(w);
@@ -6471,7 +6538,13 @@ function prevItem(){
 function togglePrep(id){
   const w=W();
   w.state.prepDone=w.state.prepDone||{};
-  if(w.state.prepDone[id]) delete w.state.prepDone[id]; else w.state.prepDone[id]=true;
+  const wasOn=!!w.state.prepDone[id];
+  if(wasOn) delete w.state.prepDone[id]; else w.state.prepDone[id]=true;
+  /* she got there first — drop the clock rather than let it beep at her
+     over the next movement */
+  if((w.state.work&&w.state.work.itemId===id)||(w.state.lead&&w.state.lead.itemId===id)){
+    w.state.work=null; w.state.lead=null; clearCue("work"); clearCue("lead");
+  }
   save();
   if((w.prep||[]).every(p=>w.state.prepDone[p.id])){
     w.state.phase="work"; save(); toast("Warm-up done. Block A."); toTop();
@@ -6482,6 +6555,9 @@ function toggleCool(id){
   const w=W();
   w.state.coolDone=w.state.coolDone||{};
   if(w.state.coolDone[id]) delete w.state.coolDone[id]; else w.state.coolDone[id]=true;
+  if((w.state.work&&w.state.work.itemId===id)||(w.state.lead&&w.state.lead.itemId===id)){
+    w.state.work=null; w.state.lead=null; clearCue("work"); clearCue("lead");
+  }
   save(); renderTrain();
 }
 function celebratePR(pr){
@@ -6878,6 +6954,15 @@ function jumpTo(i){
 /* ---------- warm-up and cool-down ---------- */
 /* The picture of the move she is actually on. A 76px thumbnail is enough to
    recognise something she knows; it is not enough to learn one. */
+/* The same clock the session uses, on the warm-up and the cool-down.
+   Tapping it stops it, and stops it starting itself again on that move. */
+function holdBtnHTML(w){
+  const it=activeItem(w); if(!it) return '';
+  return '<button class="btn quiet" style="margin-top:14px" id="workBtn" onclick="startWork(\''+it.id+'\')">'+
+    ICO.play+'<span class="lbl">Start '+holdSecs(it)+'s</span></button>'+
+    '<button class="btn sec" style="margin-top:10px" onclick="completeActive(W(),\''+it.id+'\')">'+
+    ICO.check+'<span class="lbl">Done — next</span></button>';
+}
 function guideHTML(item,label){
   if(!item) return '';
   const e=EX(item.ex)||{};
@@ -6902,6 +6987,7 @@ function prepHTML(w){
     (neck>=4?'<div class="cue neck" style="margin-top:14px">'+ICO.neck+
       '<span>Neck at '+neck+' today. Longer prep, and the overhead work is out.</span></div>':'')+
     guideHTML((w.prep||[]).find(p=>!done[p.id]), "Now")+
+    holdBtnHTML(w)+
     '<div class="updeck" style="margin-top:14px">'+
       (w.prep||[]).map(p=>'<div class="upnext '+(done[p.id]?"done":"")+'">'+
         '<button class="up-open" onclick="howTo(\''+p.id+'\')" aria-label="How to do '+esc(p.ex)+'">'+
@@ -6919,6 +7005,7 @@ function coolHTML(w){
   return '<div class="card pad-lg">'+
     '<div class="eyebrow">Last thing</div><h2 style="margin-top:6px">Cool-down</h2>'+
     guideHTML((w.cooldown||[]).find(c=>!done[c.id]), "Now")+
+    holdBtnHTML(w)+
     '<div class="updeck" style="margin-top:14px">'+
       (w.cooldown||[]).map(c=>'<div class="upnext '+(done[c.id]?"done":"")+'">'+
         '<button class="up-open" onclick="howTo(\''+c.id+'\')" aria-label="How to do '+esc(c.ex)+'">'+

@@ -464,6 +464,34 @@ SHE ALWAYS LANDS ON THE PICTURE
   When nothing has moved — the clock repainting, a warm-up move ticked off
   — she is left exactly where she was, so she can read ahead in peace.
 
+THE WARM-UP AND THE COOL-DOWN RUN THEMSELVES
+  They used to be checklists: read a move, do it, tap a tick, read the next
+  one. They now run exactly like the session does. The clock counts her in
+  three-two-one, runs the hold, beeps when the time is up, calls "swap
+  sides" half way through anything marked each side, says the name of the
+  next move out loud and moves the picture on to it. She can put the phone
+  down and get through the whole warm-up without touching it, and the
+  cool-down finishes the session by itself at the end of the last stretch.
+
+  Moves written in reps rather than seconds — twelve band pull-aparts, eight
+  wall slides — get a generous clock of their own (four seconds a rep, 20 to
+  60 seconds) so the sequence never stalls waiting to be tapped. The card
+  still says "12 reps"; the button says how long it will run.
+
+  Nothing is taken away. Tapping the running clock stops it and stops it
+  starting itself again on that move; the tick beside any move still marks
+  it done by hand and kills the clock on it; "Done — next" steps on
+  immediately; and the Start timed moves for me switch in Settings turns the
+  whole thing off, in the warm-up and cool-down exactly as in the session.
+
+  Fixing this turned up a real bug worth naming. A clock belongs to one
+  movement, and nothing was clearing it when she moved on some other way —
+  tapping "start block A" part-way through a warm-up hold, for instance. The
+  stale timer then sat there for ever pointing at a movement she had left,
+  and because a timer was running, nothing would start the next one either:
+  the auto-timer was dead for the rest of the session. Every tick now drops
+  a clock whose movement is no longer the one she is on.
+
 THE WARM-UP AND THE COOL-DOWN
   Both now show the move she is on, full width, with its cue — not just a
   thumbnail. Tick it and the picture moves to the next one. Tapping any name
