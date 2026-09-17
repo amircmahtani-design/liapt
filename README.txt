@@ -419,6 +419,32 @@ THE TIMER RUNS ITSELF
   The switches are on and the beeps ship all the way up. The existing sound
   and vibration switches still apply.
 
+THE SPOKEN CUES
+  The voice was already at the browser's maximum — an utterance's volume
+  caps at 1 and there is no way to amplify synthesised speech the way the
+  beeps go through a compressor. It sounded quiet for two other reasons,
+  both now fixed:
+
+  IT WAS TALKING OVER THE BEEP. "Next. Lat Pulldown" started at the same
+  instant as the finish cue, and that cue now peaks near full scale, so the
+  voice was simply masked by it. Each spoken cue now waits for its own beep
+  to finish: the end-of-set cue sounds for 980ms and the voice starts at
+  1050ms; the side change cue ends at 460ms and "Swap sides" starts at
+  520ms.
+
+  IT WAS USING WHATEVER VOICE CAME FIRST. iOS ships compact voices that are
+  noticeably thinner and quieter than the enhanced ones. The app now picks
+  the best voice on the phone — enhanced and premium first, Siri next,
+  compact last, English and local over anything else — and names it in
+  Settings. If the best one available is still a compact voice, Settings
+  says so and gives the one-download fix: iPhone Settings -> Accessibility
+  -> Spoken Content -> Voices -> English -> an Enhanced or Premium voice.
+
+  Two smaller things. speechSynthesis.cancel() was being called before every
+  utterance, which on iOS makes it drop the new one; it now only clears
+  something genuinely stuck. And if the platform refuses the chosen voice,
+  the cue is spoken in the default voice rather than silently lost.
+
 THE BEEPS ARE LOUD
   A phone speaker is small and she is at the far end of a gym with music
   on, so the cues were rebuilt to carry:

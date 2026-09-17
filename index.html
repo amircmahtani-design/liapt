@@ -1055,15 +1055,64 @@ function cueDone(){
 }
 /* Spoken cues, so the one thing she would have looked up — what is next —
    is said out loud. Off in Settings if it grates. */
-function say(text){
-  if(!(DB.prefs&&DB.prefs.voice)) return;
+/* How long each cue actually sounds for, so the voice can wait for it. */
+const CUE_LEN = { tick:0.2, go:0.36, swap:0.52, done:1.05 };
+/* Not every voice on the phone is the same loudness. The compact ones iOS
+   ships by default are thin and quiet; an enhanced or premium voice is
+   markedly louder and clearer at the same volume. Pick the best there is,
+   once, and keep it. */
+let _voice=null, _voiceDone=false;
+function pickVoice(){
+  if(_voiceDone) return _voice;
   try{
-    if(!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(String(text));
-    u.rate=1.05; u.pitch=1; u.volume=1;
-    window.speechSynthesis.speak(u);
-  }catch(e){}
+    const all=window.speechSynthesis.getVoices()||[];
+    if(!all.length) return null;                  /* iOS fills these in late */
+    _voiceDone=true;
+    const en=all.filter(v=>/^en/i.test(v.lang||""));
+    const pool=en.length? en : all;
+    const score=v=>{
+      const n=(v.name||"").toLowerCase();
+      let s=0;
+      if(/premium|enhanced/.test(n)) s+=6;        /* the loud, full ones */
+      if(/siri/.test(n)) s+=4;
+      if(/compact/.test(n)) s-=6;                 /* the thin, quiet ones */
+      if(/^en-gb/i.test(v.lang||"")) s+=2;        /* she is English */
+      if(v.localService) s+=1;                    /* no network stall mid-set */
+      return s;
+    };
+    _voice=pool.slice().sort((a,b)=>score(b)-score(a))[0]||null;
+  }catch(e){ _voice=null; }
+  return _voice;
+}
+function voiceName(){ const v=pickVoice(); return v? v.name : ""; }
+/* Worth telling her about: a compact voice is the single biggest reason the
+   coach sounds quiet next to the beeps, and it is one download to fix. */
+function voiceThin(){
+  const v=pickVoice();
+  return !!v && !/premium|enhanced|siri/i.test(v.name||"");
+}
+/* Speak at full volume, and — the part that actually matters — not on top
+   of the beep. The cues now peak near full scale, so a voice started at the
+   same moment is simply masked by them; it sounds quiet because it is
+   competing, not because it is turned down. `after` waits for the cue. */
+function say(text,after){
+  if(!(DB.prefs&&DB.prefs.voice)) return;
+  const go=()=>{
+    try{
+      if(!window.speechSynthesis) return;
+      /* Only clear something genuinely stuck; cancel() immediately before
+         speak() makes iOS drop the new utterance altogether. */
+      if(window.speechSynthesis.speaking||window.speechSynthesis.pending) window.speechSynthesis.cancel();
+      const u=new SpeechSynthesisUtterance(String(text));
+      u.rate=1; u.pitch=1; u.volume=1;
+      /* A voice the platform will not accept must never cost her the cue —
+         speaking in the default voice beats not speaking at all. */
+      try{ const v=pickVoice(); if(v){ u.voice=v; u.lang=v.lang||"en-GB"; } }catch(e){}
+      window.speechSynthesis.speak(u);
+    }catch(e){}
+  };
+  const wait=Math.round((after||0)*1000);
+  if(wait>0) setTimeout(go,wait); else go();
 }
 /* Fire a cue once per whole second, however often the painter runs. */
 let CUE={};
@@ -1131,6 +1180,8 @@ function beep(times){
    workout and Pause are taps, so this runs there. */
 let _spoke=false;
 function unlockAudio(){
+  try{ if(window.speechSynthesis){ pickVoice();
+    window.speechSynthesis.onvoiceschanged=()=>{ _voiceDone=false; pickVoice(); }; } }catch(e){}
   try{ const a=audioUp(); if(a&&a.state==="suspended") a.resume(); }catch(e){}
   try{ if(navigator.audioSession) navigator.audioSession.type="playback"; }catch(e){}
   try{
@@ -6364,7 +6415,7 @@ function paintRest(w){
   if(left<=0.2 && !isPaused(w)){
     clearCue("rest");
     alertDone();
-    if(r.next) say("Next. "+r.next);
+    if(r.next) say("Next. "+r.next, CUE_LEN.done);
     endRest();
   }
 }
@@ -6474,12 +6525,12 @@ function completeActive(w,id){
   const left=list.filter(x=>!w.state[key][x.id]);
   if(!left.length){
     if(ph==="prep"){
-      w.state.phase="work"; save(); say("Warm-up done. Block A.");
+      w.state.phase="work"; save(); say("Warm-up done. Block A.", CUE_LEN.done);
       toast("Warm-up done. Block A."); renderTrain();
     } else { save(); finishSession(); }
     return;
   }
-  save(); say("Next. "+left[0].ex); renderTrain();
+  save(); say("Next. "+left[0].ex, CUE_LEN.done); renderTrain();
 }
 function paintWork(w){
   const b=el("workBtn"); if(!b) return;
@@ -6514,7 +6565,7 @@ function paintWork(w){
       clearCue("work");
       w.state.work={ itemId:it.id, total:k.total, side:2,
                      endsAt:Date.now()+k.total*1000, left:null };
-      cueSwap(); say("Swap sides");
+      cueSwap(); say("Swap sides", CUE_LEN.swap);
       save(); renderTrain(); return;
     }
     w.state.work=null; clearCue("work");
@@ -8570,7 +8621,7 @@ function testCues(){
   unlockAudio();
   if(!(DB.prefs&&DB.prefs.sound)){ toast("Sound is switched off below"); return; }
   cueTick(); tone(1046,0.13,1,0.55); tone(1046,0.13,2,0.55);
-  setTimeout(()=>{ cueDone(); say("Time"); },3000);
+  setTimeout(()=>{ cueDone(); say("Time is up", CUE_LEN.done); },3000);
   toast("Three, two, one…");
 }
 function toneSheet(){
@@ -8617,6 +8668,10 @@ function renderSettings(){
       '<div class="listrow"><span class="grow"><span class="k">Beeps</span>'+
         '<div class="tiny dim">'+esc(CUE_LABEL[DB.prefs.cueVolume]||CUE_LABEL.max)+'</div></span>'+
         '<button class="chip" onclick="cueVolSheet()">Change</button></div>'+
+      (voiceThin()? '<div class="listrow"><span class="grow">'+
+        '<div class="tiny dim">The voice on this phone is a compact one, which is quieter and '+
+        'thinner than it needs to be. iPhone Settings → Accessibility → Spoken Content → '+
+        'Voices → English, then download an Enhanced or Premium voice.</div></span></div>' : '')+
       '<div class="listrow"><span class="grow"><span class="k">Hear the count-in</span>'+
         '<div class="tiny dim">Three, two, one, and the end of a set</div></span>'+
         '<button class="chip" onclick="testCues()">Play</button></div>'+
@@ -8624,7 +8679,8 @@ function renderSettings(){
         '<div class="tiny dim">The phone stays lit while the app is open</div></span>'+
         sw("swAwake",DB.prefs.keepAwake!==false,"togglePref(\'keepAwake\',this)")+'</div>'+
       '<div class="listrow"><span class="grow"><span class="k">Say what is next</span>'+
-        '<div class="tiny dim">Speaks the next movement and the side change out loud</div></span>'+
+        '<div class="tiny dim">Speaks the next movement and the side change out loud'+
+        (voiceName()? ' · '+esc(voiceName()) : '')+'</div></span>'+
         sw("swVoice",DB.prefs.voice!==false,"togglePref(\'voice\',this)")+'</div>'+
       '<div class="listrow"><span class="k">Sound on the timers</span>'+sw("swSound",DB.prefs.sound,"togglePref('sound',this)")+'</div>'+
       '<div class="listrow"><span class="k">Vibration</span>'+sw("swVib",DB.prefs.vibrate,"togglePref('vibrate',this)")+'</div>'+
