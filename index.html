@@ -2942,6 +2942,85 @@ const ADVANCED = (()=>{
   return out;
 })();
 function isAdvanced(ex){ return ADVANCED.has(ex); }
+/* ---------- which of two movements is the kinder one ----------
+   Every entry names an easier and a harder version of itself, so there is a
+   real ladder to read — the swap sheet just was not reading it. A step down
+   only counts when it is not mutually declared: Clamshell and Side-lying
+   Hip Abduction each name the other as easier, which means they are the
+   same level, not that each is below the other. */
+function stepDown(ex){
+  const e=EXDB[ex]||{}, d=e.easier;
+  if(!d || d===ex || !EXDB[d]) return null;
+  if((EXDB[d]||{}).easier===ex) return null;        /* a loop: same level */
+  return d;
+}
+function stepUp(ex){
+  const e=EXDB[ex]||{}, u=e.harder;
+  if(!u || u===ex || !EXDB[u]) return null;
+  if((EXDB[u]||{}).harder===ex) return null;
+  return u;
+}
+/* How far up the ladder a movement sits. */
+const DIFF_RANK = (()=>{
+  const rank={};
+  const walk=(n,depth)=>{
+    if(rank[n]!=null) return rank[n];
+    if(depth>12) return 0;                          /* pathological chain */
+    const d=stepDown(n);
+    const r=d? walk(d,depth+1)+1 : 0;
+    rank[n]=r; return r;
+  };
+  Object.keys(EXDB).forEach(n=>walk(n,0));
+  return rank;
+})();
+function diffRank(ex){ const r=DIFF_RANK[ex]; return r==null? 0 : r; }
+/* Both movements get a say, in both directions, before the rank is used as
+   a tiebreak — reading only one of the four declarations is what let a
+   declared harder version through as "easier". */
+/* Some pairs contradict each other — DB Curl and Hammer Curl each name the
+   other as their harder version. The catalogue is not ranking them, so
+   neither is offered as a step from the other rather than letting a
+   tiebreak invent an order. */
+function sameLevel(a,b){
+  const ea=EXDB[a]||{}, eb=EXDB[b]||{};
+  return (ea.easier===b && eb.easier===a) || (ea.harder===b && eb.harder===a);
+}
+function easierThan(a,b){
+  if(a===b || sameLevel(a,b)) return false;
+  if(stepDown(b)===a) return true;                  /* b calls a its easier one */
+  if(stepUp(a)===b)   return true;                  /* a calls b its harder one */
+  if(stepDown(a)===b) return false;                 /* a calls b its easier one */
+  if(stepUp(b)===a)   return false;                 /* b calls a its harder one */
+  return diffRank(a) < diffRank(b);
+}
+function harderThan(a,b){ return a!==b && easierThan(b,a); }
+/* A step up or down has to still be the same kind of movement. Ranking
+   alone would offer a Pallof Press as a harder Deadlift — true on the
+   ladder, useless as a swap — so candidates must share the pattern, or
+   failing that the muscle the movement is actually for. */
+function ladderOptions(w,item,dir){
+  const ex=item.ex, e=EX(ex)||{};
+  const all=replacementsFor(w,item.id,400);
+  const right=o=>dir==="easier"? easierThan(o.name,ex) : harderThan(o.name,ex);
+  const declared=dir==="easier"? stepDown(ex) : stepUp(ex);
+  let list=all.filter(o=>right(o) && (o.name===declared || (EX(o.name)||{}).pat===e.pat));
+  if(!list.length)
+    list=all.filter(o=>right(o) && ((EX(o.name)||{}).m||[])[0]===(e.m||[])[0]);
+  return list.sort(byStepFrom(ex,dir));
+}
+/* The kindest honest answer first: the movement's own declared easier
+   version, then the closest step down rather than the easiest thing in the
+   catalogue, then whatever scored best. */
+function byStepFrom(ex,dir){
+  const want = dir==="easier"? stepDown(ex) : stepUp(ex);
+  return (a,b)=>{
+    const da=(a.name===want)?1:0, db=(b.name===want)?1:0;
+    if(da!==db) return db-da;
+    const ra=diffRank(a.name), rb=diffRank(b.name);
+    if(ra!==rb) return dir==="easier"? rb-ra : ra-rb;
+    return (b.score||0)-(a.score||0);
+  };
+}
 /* Conditioning is meant to stay low-impact and away from the loaded
    stations — a bench press is not a circuit movement. */
 const CIRCUIT_EQ = ["bw","band","kb","trx","ball","row","db"];
@@ -4704,8 +4783,9 @@ function whyReplacement(c,e,target){
   const bits=[];
   if((c.m||[])[0]===target) bits.push("same muscle");
   if(c.pat===e.pat) bits.push("same pattern");
+  /* the row already shows what kit it needs, so only say when it is the
+     same station — repeating "Dumbbells · Dumbbells" told her nothing */
   if(c.eq===e.eq) bits.push("no kit change");
-  else bits.push(EQUIP_LABEL[c.eq]||c.eq);
   return bits.slice(0,2).join(" · ");
 }
 
@@ -5114,7 +5194,8 @@ const S_ACTION={type:"object",additionalProperties:false,
   required:["kind","exercise","replacement","value","list"],
   properties:{
     kind:{type:"string",enum:["none","set_duration","rest_today","rebuild","replace","add","remove",
-      "set_rounds","ban","hold","rotate","set_goal","set_equipment","set_style","set_build","unhold","love"]},
+      "set_rounds","ban","hold","rotate","easier","harder","set_goal","set_equipment",
+      "set_style","set_build","unhold","love"]},
     exercise:{type:"string",description:"Exact catalogue name; a block letter for set_rounds; a style or build key for set_style/set_build; otherwise an empty string."},
     replacement:{type:"string",description:"Exact catalogue name, or an empty string."},
     value:{type:"number",description:"Minutes for set_duration, rounds for set_rounds, otherwise 0."},
@@ -5410,6 +5491,25 @@ function runCoachAction(a){
     save();
     return ex+" noted as one you like — it will come round more.";
   }
+  /* "this one is too hard" / "give me something easier" — a step down the
+     ladder the catalogue already describes, chosen from what the engine
+     would allow today, and never in the wrong direction. */
+  if(a.kind==="easier" || a.kind==="harder"){
+    const want=a.kind;
+    const ex=name(a.exercise) || (curItem(w)||{}).ex;
+    if(!ex) return null;
+    /* the warm-up and the cool-down count too, not just the blocks */
+    const item=(w.blocks||[]).flatMap(b=>b.items)
+      .concat(w.prep||[], w.cooldown||[]).find(i=>i.ex===ex);
+    if(!item) return null;
+    const opts=ladderOptions(w,item,want);
+    if(!opts.length) return want==="easier"
+      ? "There is nothing kinder than "+ex+" that fits today — drop the weight or the reps instead."
+      : "There is nothing harder than "+ex+" that fits today — add weight or reps instead.";
+    if(!swapAnyItem(w,item.id,opts[0].name,want)) return null;
+    save();
+    return ex+" → "+opts[0].name+" ("+(want==="easier"?"a step down":"a step up")+").";
+  }
   /* "give me something else for this one" — the engine chooses, not the model */
   if(a.kind==="rotate"){
     const oldEx=name(a.exercise); if(!oldEx) return null;
@@ -5455,6 +5555,9 @@ kind "remove" with exercise — an exact catalogue name in today's session.
 kind "set_rounds" with exercise as a block letter (A, B, C, or empty for all) and value as the number of rounds.
 kind "hold" with exercise — it hurt, take it out until she says otherwise.
 kind "ban" with exercise — she never wants to see it again.
+kind "easier" with exercise — she is finding it too hard; step down the ladder.
+kind "harder" with exercise — it is too easy; step up. Leave exercise empty for
+  the one she is on. Never use rotate for these: rotate ignores difficulty.
 kind "unhold" with exercise — put one she banned or held back in.
 kind "love" with exercise — she likes it; bring it round more often.
 kind "set_goal" with list — the body she is building, in priority order, from
@@ -5533,6 +5636,12 @@ function localIntent(text){
   /* never again */
   else if(ex && /\b(hate|hates|never again|never want|can'?t stand|don'?t like|do not like|dislike)\b/.test(low))
     A("ban",{exercise:ex});
+  /* too hard, or too easy — checked before the generic swap, since
+     "something easier instead of X" says both */
+  else if(/\b(easier|too hard|too heavy|too difficult|struggl\w*|can'?t manage|kinder|gentler|simpler|scale (it )?back|regress\w*|less intense)\b/.test(low))
+    A("easier",{exercise:ex||""});
+  else if(/\b(harder|too easy|too light|step (me )?up|level (me )?up|more challenging|tougher|progress me|push me)\b/.test(low))
+    A("harder",{exercise:ex||""});
   /* something else for this one */
   else if(ex && /\b(something else|swap|switch|change|different|instead|replace|another)\b/.test(low))
     A("rotate",{exercise:ex});
@@ -7440,7 +7549,12 @@ function finishedHTML(w){
 function swapSections(w,id){
   const f=findAnyItem(w,id); if(!f) return [];
   const it=f.item, e=EX(it.ex)||{};
-  const all=replacementsFor(w,id,40);
+  /* Every legal replacement, so Easier and Harder are chosen from movements
+     the engine would actually allow — her avoid list, what is on hold, the
+     kit she has today and what is already in the session all still apply.
+     The declared easier version used to be offered straight from the
+     catalogue, which skipped every one of those checks. */
+  const all=replacementsFor(w,id,400);
   const byName=n=>all.find(o=>o.name===n);
   const used=new Set(), out=[];
   const take=(title,list,fallbackWhy)=>{
@@ -7451,21 +7565,26 @@ function swapSections(w,id){
     out.push({title, items:[{name, why:(o.why)||fallbackWhy}]});
   };
   /* the three she actually wants: kinder, the same, or with other kit */
+  const down=ladderOptions(w,it,"easier");
   take("Easier",
-    [e.easier&&{name:e.easier,why:"a kinder version of the same movement"},
-     ...all.filter(o=>(EX(o.name)||{}).easier===it.ex).map(o=>({...o,why:"a step below"}))],
+    down.map(o=>({...o, why: o.name===stepDown(it.ex)
+      ? "a kinder version of the same movement" : "a step below"})),
     "a step below");
+  /* Same level means the same level. Anything harder does not belong under
+     this heading either. */
+  const level=all.filter(o=>(EX(o.name)||{}).pat===e.pat && !harderThan(o.name,it.ex));
   take("Same level",
-    all.filter(o=>(EX(o.name)||{}).pat===e.pat),
+    level.sort((a,b)=>(diffRank(a.name)===diffRank(it.ex)?-1:0)-(diffRank(b.name)===diffRank(it.ex)?-1:0)),
     "same pattern, same muscle");
   take("Different kit",
-    all.filter(o=>(EX(o.name)||{}).eq!==e.eq),
+    all.filter(o=>(EX(o.name)||{}).eq!==e.eq && !harderThan(o.name,it.ex)),
     "same job, other equipment");
   /* and the rest, for when none of those is right */
   const more=all.filter(o=>!used.has(o.name)).slice(0,3);
-  if(e.harder && EX(e.harder) && !used.has(e.harder)){
-    out.push({title:"Harder", items:[{name:e.harder, why:"a step up when you are ready"}]});
-    used.add(e.harder);
+  const up=ladderOptions(w,it,"harder").filter(o=>!used.has(o.name));
+  if(up.length){
+    out.push({title:"Harder", items:[{name:up[0].name, why:"a step up when you are ready"}]});
+    used.add(up[0].name);
   }
   if(more.length) out.push({title:"Others that fit", items:more.filter(o=>!used.has(o.name)).slice(0,3)});
   return out;

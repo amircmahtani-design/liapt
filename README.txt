@@ -328,6 +328,59 @@ SWAP, AND "I DON'T LIKE THIS ONE"
   not in the warm-up, not in the cool-down. Put it back any time in
   Settings -> Programme -> Movements you like and avoid.
 
+EASIER MEANS EASIER
+  Asking the swap sheet for an easier movement could hand her a harder one.
+  Every entry in the catalogue names an easier and a harder version of
+  itself, so there is a real ladder to read — the swap sheet just was not
+  reading it. Three separate faults:
+
+  1. The fallback was inverted. When the movement's own declared easier
+     version was not available, the code looked for movements whose EASIER
+     version is the one she is doing — which is the definition of harder.
+     Swept across all 169 movements, that produced 34 sheets offering a
+     harder movement under the heading "Easier".
+
+  2. The declared easier version skipped every check. It was taken straight
+     from the catalogue rather than from the approved list, so "Easier"
+     could offer something she had banned, something on hold after pain,
+     something needing kit she hasn't got today, something already in the
+     session, or the same movement straight back.
+
+  3. Nothing verified the direction. "Same level" and "Different kit" could
+     both hand her something harder too.
+
+  Now there is one difficulty ladder, built from all four declarations each
+  pair makes about the other, and the sections are chosen from the approved
+  list only. Two refinements the data forced:
+
+    - Some pairs contradict each other. Clamshell and Side-lying Hip
+      Abduction each name the other as easier; DB Curl and Hammer Curl each
+      name the other as harder. The catalogue is not ranking those, so they
+      are treated as the same level rather than letting a tiebreak invent an
+      order.
+
+    - A step must stay the same kind of movement. On rank alone a Pallof
+      Press is a "harder Deadlift" — true on the ladder, useless as a swap.
+      Candidates now have to share the movement pattern, or failing that the
+      muscle the movement is actually for.
+
+  Swept over every movement twice, once with the obvious kind option taken
+  off the table: 0 sheets now offer a harder movement under "Easier", 0
+  under a same-level heading, 0 non-harder under "Harder", 0 options the
+  engine would refuse, and 0 offering the same movement back. The ladder
+  itself has no contradictory pairs.
+
+  She can also just say it. "This is too hard", "give me something easier",
+  "I'm struggling with this one", "that was too easy", "step me up" are read
+  as a step down or up the ladder — with or without the API key, and never
+  in the wrong direction. Before this they fell through to a plain rotate,
+  which ignores difficulty entirely.
+
+  When there genuinely is nothing kinder or harder that fits, it says so
+  instead of substituting nonsense: "There is nothing harder than Deadlift
+  that fits today — add weight or reps instead." Which is the right answer:
+  a deadlift is the top of its ladder, and the progression there is load.
+
 TALKING TO THE COACH CHANGES THE APP
   She can say what she wants in her own words and the programme changes.
   Seventeen validated actions, and the engine still gets the last word on
