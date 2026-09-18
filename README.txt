@@ -638,6 +638,48 @@ SHE ALWAYS LANDS ON THE PICTURE
   When nothing has moved — the clock repainting, a warm-up move ticked off
   — she is left exactly where she was, so she can read ahead in peace.
 
+ONE SIDE, THEN THE OTHER
+  A timed stretch could run one leg and move straight on to the next
+  movement. The cool-down was guessing which movements are one-sided from
+  the name — anything matching "Stretch", "Open Book" or "Thread" — and
+  Pigeon Pose and Figure Four (seated) are one leg each and match none of
+  those, so they ran once and were ticked off.
+
+  There is now one place that decides, isOneSided(), used by every item the
+  app builds: the warm-up, the cool-down and the session itself. It reads
+  the "unilateral" tag where the catalogue has one and a list of one-sided
+  shapes where it does not — single-leg, single-arm, half-kneeling,
+  side-lying, side plank, pigeon, figure four, 90/90 hold, hamstring sweep,
+  upper trap, levator, world's greatest, hip flexor, hip airplane, suitcase,
+  cossack, bulgarian, split squat, step-up, the lunges, kickback, clamshell,
+  fire hydrant, pallof, quadruped, windmill and the rest. It only ever ADDS
+  a side, so anything a template already marked each-side is untouched.
+
+  So a one-sided hold now counts her in, runs the full time, calls "swap
+  sides", runs the full time again and only then moves on. Measured on all
+  three of the stretches that were failing: 40.0s, swap, 40.0s.
+
+FAVOURITE AND CHALLENGING
+  The two buttons after a session were "Best move" and "Worst move". They
+  are now "Favourite" and "Challenging".
+
+  That is not only a rename, because the words mean different things.
+  "Worst" fed the same signal as disliked, which makes a movement come
+  round less often. "Challenging" must not do that: something she finds hard
+  is exactly what she should keep doing, and quietly taking it away would
+  work against getting stronger. So Challenging now:
+
+    - keeps the movement in the programme and in the rotation, with no
+      penalty to how often it comes round
+    - holds the numbers where they are for the next fortnight instead of
+      loading it up again, and says so: "you said this one was challenging,
+      so the numbers hold"
+    - offers the kinder version in the swap sheet
+
+  Never wanting to see a movement again is still there, where it always
+  was and where it belongs — explicit, on the movement itself: Swap ->
+  I don't like this one.
+
 THE WARM-UP AND THE COOL-DOWN RUN THEMSELVES
   They used to be checklists: read a move, do it, tap a tick, read the next
   one. They now run exactly like the session does. The clock counts her in
