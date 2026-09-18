@@ -1061,56 +1061,105 @@ const CUE_LEN = { tick:0.2, go:0.36, swap:0.52, done:1.05 };
    ships by default are thin and quiet; an enhanced or premium voice is
    markedly louder and clearer at the same volume. Pick the best there is,
    once, and keep it. */
-let _voice=null, _voiceDone=false;
+/* ---------- the spoken cues ----------
+   iOS speech is fragile in three ways that all end in silence, and all
+   three were biting: the queue wedges with speaking=true and never clears,
+   so every later utterance is swallowed; a voice object goes stale after
+   the list changes and assigning it kills the utterance; and a network
+   voice fails without a sound. So: local voices only, the queue cleared in
+   its own task before every utterance, and a watchdog that falls back to
+   the phone's default voice if nothing actually starts. */
+let _voice=null, _voiceN=-1;
+function voicesNow(){ try{ return window.speechSynthesis.getVoices()||[]; }catch(e){ return []; } }
 function pickVoice(){
-  if(_voiceDone) return _voice;
-  try{
-    const all=window.speechSynthesis.getVoices()||[];
-    if(!all.length) return null;                  /* iOS fills these in late */
-    _voiceDone=true;
-    const en=all.filter(v=>/^en/i.test(v.lang||""));
-    const pool=en.length? en : all;
-    const score=v=>{
-      const n=(v.name||"").toLowerCase();
-      let s=0;
-      if(/premium|enhanced/.test(n)) s+=6;        /* the loud, full ones */
-      if(/siri/.test(n)) s+=4;
-      if(/compact/.test(n)) s-=6;                 /* the thin, quiet ones */
-      if(/^en-gb/i.test(v.lang||"")) s+=2;        /* she is English */
-      if(v.localService) s+=1;                    /* no network stall mid-set */
-      return s;
-    };
-    _voice=pool.slice().sort((a,b)=>score(b)-score(a))[0]||null;
-  }catch(e){ _voice=null; }
+  const all=voicesNow();
+  if(!all.length){ _voice=null; _voiceN=-1; return null; }
+  if(_voice && _voiceN===all.length) return _voice;   /* list unchanged */
+  _voiceN=all.length;
+  const en=all.filter(v=>/^en/i.test(v.lang||""));
+  const pool=en.length? en : all;
+  /* A network voice stalls or dies silently mid-set. Anything local beats
+     the best-sounding voice she cannot rely on. */
+  const local=pool.filter(v=>v.localService!==false);
+  const use=local.length? local : pool;
+  const score=v=>{
+    const n=(v.name||"").toLowerCase();
+    let s=0;
+    if(/premium|enhanced/.test(n)) s+=6;        /* the loud, full ones */
+    if(/siri/.test(n)) s+=4;
+    if(/compact/.test(n)) s-=6;                 /* the thin, quiet ones */
+    if(/^en-gb/i.test(v.lang||"")) s+=2;        /* she is English */
+    return s;
+  };
+  _voice=use.slice().sort((a,b)=>score(b)-score(a))[0]||null;
   return _voice;
 }
 function voiceName(){ const v=pickVoice(); return v? v.name : ""; }
-/* Worth telling her about: a compact voice is the single biggest reason the
-   coach sounds quiet next to the beeps, and it is one download to fix. */
 function voiceThin(){
   const v=pickVoice();
   return !!v && !/premium|enhanced|siri/i.test(v.name||"");
 }
-/* Speak at full volume, and — the part that actually matters — not on top
-   of the beep. The cues now peak near full scale, so a voice started at the
-   same moment is simply masked by them; it sounds quiet because it is
-   competing, not because it is turned down. `after` waits for the cue. */
+/* What the phone actually did with the last cue, so Settings can say so
+   rather than leaving her guessing why it is silent. */
+let VOICE_STATE="untried";
+function voiceState(){ return VOICE_STATE; }
+/* iOS decides which output route the page gets. While an audio source is
+   actually running the page holds the media route — the one the beeps come
+   out of — so a source is kept alive under the voice. It is 40 Hz at a
+   thousandth of full scale, straight to the output rather than through the
+   compressor, so it is inaudible on a phone speaker; it is there to hold
+   the route, not to be heard. Best effort: iOS may still put speech on the
+   ringer channel, which is why Settings says to check that volume. */
+let _hold=null;
+function holdRoute(on){
+  try{
+    if(on){
+      if(_hold) return;
+      const a=audioUp(); if(!a) return;
+      const o=a.createOscillator(), g=a.createGain();
+      o.frequency.value=40; g.gain.value=0.001;
+      o.connect(g); g.connect(a.destination); o.start();
+      _hold={o,g};
+    } else if(_hold){ try{ _hold.o.stop(); }catch(e){} _hold=null; }
+  }catch(e){ _hold=null; }
+}
+let _sayT=null;
+function speakNow(text,voice,attempt){
+  const ss=window.speechSynthesis; if(!ss) return;
+  /* hold the media route, and undo a pause left over from being away */
+  try{ if(navigator.audioSession) navigator.audioSession.type="playback"; }catch(e){}
+  holdRoute(true);
+  try{ ss.resume(); }catch(e){}
+  try{ ss.cancel(); }catch(e){}
+  /* The clear has to be its own task: cancel() and speak() in the same one
+     and iOS drops the new utterance. */
+  setTimeout(()=>{
+    let started=false;
+    let u;
+    try{ u=new SpeechSynthesisUtterance(String(text)); }catch(e){ VOICE_STATE="failed"; return; }
+    u.rate=1; u.pitch=1; u.volume=1;
+    if(voice){ try{ u.voice=voice; u.lang=voice.lang||"en-GB"; }catch(e){} }
+    u.onstart=()=>{ started=true; VOICE_STATE="spoke"; };
+    u.onend=()=>{ setTimeout(()=>holdRoute(false),200); };
+    u.onerror=()=>{ holdRoute(false);
+      if(attempt<1) speakNow(text,null,attempt+1); else VOICE_STATE="failed"; };
+    try{ ss.speak(u); }catch(e){ VOICE_STATE="failed"; return; }
+    clearTimeout(_sayT);
+    _sayT=setTimeout(()=>{
+      if(started) return;
+      /* never opened its mouth \u2014 once more in the phone's own voice */
+      if(attempt<1) speakNow(text,null,attempt+1);
+      else { VOICE_STATE="silent"; holdRoute(false); }
+    },700);
+  },25);
+}
+/* `after` holds the voice back until the beep has finished, so the two are
+   not fighting each other. */
 function say(text,after){
   if(!(DB.prefs&&DB.prefs.voice)) return;
-  const go=()=>{
-    try{
-      if(!window.speechSynthesis) return;
-      /* Only clear something genuinely stuck; cancel() immediately before
-         speak() makes iOS drop the new utterance altogether. */
-      if(window.speechSynthesis.speaking||window.speechSynthesis.pending) window.speechSynthesis.cancel();
-      const u=new SpeechSynthesisUtterance(String(text));
-      u.rate=1; u.pitch=1; u.volume=1;
-      /* A voice the platform will not accept must never cost her the cue —
-         speaking in the default voice beats not speaking at all. */
-      try{ const v=pickVoice(); if(v){ u.voice=v; u.lang=v.lang||"en-GB"; } }catch(e){}
-      window.speechSynthesis.speak(u);
-    }catch(e){}
-  };
+  if(!window.speechSynthesis){ VOICE_STATE="unsupported"; return; }
+  if(!voicesNow().length){ VOICE_STATE="novoices"; }
+  const go=()=>speakNow(text,pickVoice(),0);
   const wait=Math.round((after||0)*1000);
   if(wait>0) setTimeout(go,wait); else go();
 }
@@ -1181,7 +1230,7 @@ function beep(times){
 let _spoke=false;
 function unlockAudio(){
   try{ if(window.speechSynthesis){ pickVoice();
-    window.speechSynthesis.onvoiceschanged=()=>{ _voiceDone=false; pickVoice(); }; } }catch(e){}
+    window.speechSynthesis.onvoiceschanged=()=>{ _voiceN=-1; pickVoice(); }; } }catch(e){}
   try{ const a=audioUp(); if(a&&a.state==="suspended") a.resume(); }catch(e){}
   try{ if(navigator.audioSession) navigator.audioSession.type="playback"; }catch(e){}
   try{
@@ -8743,6 +8792,30 @@ function testCues(){
   setTimeout(()=>{ cueDone(); say("Time is up", CUE_LEN.done); },3000);
   toast("Three, two, one…");
 }
+/* Says what the phone actually did, so a silent coach is diagnosable on
+   the device instead of guessed at from here. */
+function voiceReport(){
+  if(!window.speechSynthesis) return "This browser has no speech at all.";
+  const n=voicesNow().length;
+  if(!n) return "The phone has not given the app any voices yet — tap Say it.";
+  const st=voiceState();
+  if(st==="spoke") return "Working · "+voiceName()+" · if it is quieter than the beeps, "+
+    "turn the RINGER volume up: iOS plays speech there, not on the media channel the beeps use.";
+  if(st==="silent") return "The phone accepted the cue but never spoke it. Check the RINGER volume — iOS plays speech on the ringer channel, not the media one, so the beeps can be loud while the voice is silent.";
+  if(st==="failed") return "The phone refused to speak it. Try another voice in iOS Settings → Accessibility → Spoken Content → Voices.";
+  if(st==="novoices") return "No voices were loaded when the cue fired — tap Say it.";
+  return voiceName()? (voiceName()+" · "+n+" voices available — not tried yet") : "Not tried yet";
+}
+async function testVoice(){
+  const m=el("voiceMsg");
+  if(!(DB.prefs&&DB.prefs.voice)){ if(m) m.textContent="The voice is switched off below."; return; }
+  unlockAudio();
+  VOICE_STATE="untried";
+  if(m) m.textContent="Listening for it…";
+  say("Next. Hip Thrust. Twelve reps.");
+  /* long enough for the watchdog and its one retry to have had their go */
+  setTimeout(()=>{ if(m) m.textContent=voiceReport(); },2200);
+}
 function toneSheet(){
   const cur=(DB.prefs.coachTone==="military")?"military":"warm";
   const row=(k,nm,mt)=>'<button class="pick'+(cur===k?" on":"")+'" onclick="setTone(\''+k+'\')">'+
@@ -8791,6 +8864,9 @@ function renderSettings(){
         '<div class="tiny dim">The voice on this phone is a compact one, which is quieter and '+
         'thinner than it needs to be. iPhone Settings → Accessibility → Spoken Content → '+
         'Voices → English, then download an Enhanced or Premium voice.</div></span></div>' : '')+
+      '<div class="listrow"><span class="grow"><span class="k">Test the voice</span>'+
+        '<div class="tiny dim" id="voiceMsg">'+esc(voiceReport())+'</div></span>'+
+        '<button class="chip" onclick="testVoice()">Say it</button></div>'+
       '<div class="listrow"><span class="grow"><span class="k">Hear the count-in</span>'+
         '<div class="tiny dim">Three, two, one, and the end of a set</div></span>'+
         '<button class="chip" onclick="testCues()">Play</button></div>'+

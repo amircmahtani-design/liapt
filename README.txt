@@ -472,6 +472,60 @@ THE TIMER RUNS ITSELF
   The switches are on and the beeps ship all the way up. The existing sound
   and vibration switches still apply.
 
+WHEN THE COACH IS SILENT
+  iOS speech fails silently in three ways, and all three were reachable:
+
+    - THE QUEUE WEDGES. speechSynthesis gets stuck with speaking=true and
+      never clears, usually after the page has been in the background —
+      which now happens constantly, since the app reopens into a live
+      session. Every later utterance is swallowed. The queue is now cleared
+      before every cue, IN ITS OWN TASK, because cancel() and speak() in the
+      same task makes iOS drop the new one. Both halves of that are needed;
+      doing either alone is silence.
+
+    - A VOICE OBJECT GOES STALE. After the voice list changes, the old
+      object is dead and assigning it kills the utterance without a sound.
+      The list is re-read whenever it changes rather than latched once.
+
+    - A NETWORK VOICE DIES QUIETLY. Voices with localService false need the
+      network and fail without a sound mid-set. Local voices now win over
+      any remote one, however good it sounds.
+
+  On top of that there is a watchdog. If nothing has actually started
+  speaking within 700ms, the cue is said again in the phone's own default
+  voice. Tested against all six failure modes, including one where the
+  chosen voice is accepted and then silently refuses: in every one, a word
+  still comes out of the phone.
+
+  AND IT TELLS HER WHICH IT IS. Settings -> Session -> Test the voice speaks
+  a line and then reports what the phone actually did: working (and which
+  voice), accepted-but-never-spoke, refused, or no voices loaded. A silent
+  coach is now diagnosable on the phone instead of guessed at.
+
+HOW LOUD THE VOICE CAN GET
+  Not as loud as the beeps, and this is a platform limit rather than a
+  setting: an utterance's volume caps at 1, and synthesised speech does not
+  pass through the AudioContext, so it cannot go through the compressor and
+  limiter that put the cues at -3.5 dBFS. There is no volume above maximum
+  to reach for.
+
+  THE RINGER VOLUME IS THE USUAL CULPRIT. iOS plays speech on the ringer
+  channel while Web Audio — the beeps — uses the media channel. Media up
+  and ringer down is exactly "the beeps are loud and the voice is silent".
+  Turn the ringer up with the side buttons while nothing is playing, and
+  check the Silent switch. The app now says this in Settings rather than
+  leaving it to be worked out.
+
+  What the app does do: it holds the media route while speaking, by keeping
+  a 40 Hz source at a thousandth of full scale running under the voice,
+  straight to the output rather than through the compressor, so it is
+  inaudible on a phone speaker. That can pull speech onto the louder route.
+  Best effort, not a promise — iOS decides.
+
+  And an Enhanced or Premium voice is markedly louder than the compact ones
+  iOS ships: Settings -> Accessibility -> Spoken Content -> Voices ->
+  English. Settings names the voice in use so she can see which she has.
+
 THE SPOKEN CUES
   The voice was already at the browser's maximum — an utterance's volume
   caps at 1 and there is no way to amplify synthesised speech the way the
